@@ -32,8 +32,15 @@ class FastElmo:
 
         return candidates
 
-    def get_embeddings_from_sentence(self, text, mode = "layer_2", aggregate= False):
-
+    def get_embeddings_from_sentence(self, text, mode="layer_2", aggregate= False):
+        """
+        given a string generates the embeddings from ELMO for each token. if aggregate == True, returns the average of the embedding
+        i.e., sentence embedding
+        :param text: the text  you want to embed
+        :param mode: from which layer of ELMO you want the embedding. "mean" gets the embedding of the three elmo layers for each token
+        :param aggregate: True => averages the embedding to get a sentence embedding
+        :return:
+        """
         model_output = self.elmo_model.embed_sentence(text.split())
         embeds = None
 
