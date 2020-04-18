@@ -18,12 +18,13 @@ class FastBERT:
                                 }
                             """ % uri)
         results = self._sparql.query().convert()
-        return {result["abstract"]["value"]: '' for result in results["results"]["bindings"]}
+        return {result["abstract"]["value"] for result in results["results"]["bindings"]}
 
     def search(self, label):
-        candidates = self._lookup.search(label)
-        for candidate in candidates.keys():
-            candidates[candidates] = self._fetch_abstract(candidate)
+        candidate_uris = self._lookup.search(label)
+        candidates = {}
+        for uri in candidate_uris:
+            candidates[uri] = self._fetch_abstract(uri)
 
         # TODO refinement/re-ranking
 
