@@ -1,10 +1,12 @@
 from generators.baselines import ESLookup
 from SPARQLWrapper import SPARQLWrapper, JSON
+from allennlp.commands.elmo import ElmoEmbedder
+import numpy as np
 
-
-class FastBERT:
+class FastElmo:
     def __init__(self):
         self._lookup = ESLookup()
+        self.elmo_model = ElmoEmbedder()
         self._sparql = SPARQLWrapper("http://dbpedia.org/sparql")
         self._sparql.setReturnFormat(JSON)
         # TODO init BERT model
@@ -29,3 +31,27 @@ class FastBERT:
         # TODO refinement/re-ranking
 
         return candidates
+
+    def get_embeddings_from_sentence(self, text, mode = "layer_2", aggregate= False):
+
+        model_output = self.elmo_model.embed_sentence(text.split())
+        embeds = None
+
+        if mode == "layer_2":
+            embeds = model_output[2]
+
+        if mode == "layer_1":
+            embeds = model_output[1]
+
+        if mode == "layer_0":
+            embeds = model_output[0]
+
+        if mode == "mean":
+            embeds = (model_output[0] + model_output[1] + model_output[2]) / 3
+
+        if aggregate:
+            return np.mean(embeds, axis=0)
+        else:
+            return embeds
+
+
