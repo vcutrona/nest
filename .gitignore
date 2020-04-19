@@ -1,4 +1,6 @@
 resources/
+gs/*/
+scripts/
 
 # Created by https://www.gitignore.io/api/python,virtualenv,jupyternotebooks
 # Edit at https://www.gitignore.io/?templates=python,virtualenv,jupyternotebooks
