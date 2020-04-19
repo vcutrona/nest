@@ -6,21 +6,25 @@ class ESLookup:
     def __init__(self):
         self._es = Elasticsearch(['titan'])
 
-    def search(self, value, fuzziness=2, prefix_lenght=0, max_expansions=100):
+    def search(self, label, fuzziness=2, prefix_length=0, max_expansions=100):
         """
-        :param value: keyword to search
+        :param label: keyword to search
         :param fuzziness: edit distance - a positive number, or "AUTO"
-        :param prefix_lenght: chars that must be equal (fuzziness not applied to the prefix)
+        :param prefix_length: chars that must be equal (fuzziness not applied to the prefix)
         :param max_expansions: max variations to compute
         """
         s = Search(using=self._es)
-        q = locals()
-        q['value'] = value.lower()
+        q = {
+            'value': label.lower(),
+            'fuzziness': fuzziness,
+            'prefix_length': prefix_length,
+            'max_expansions': max_expansions
+        }
         s.query = Q('bool',
-                    must=[Q('multi_match', query=value.lower(), fields=['surface_form_keyword'], boost=5),
-                          Q({"fuzzy": {"surface_form_keyword": value}})
+                    must=[Q('multi_match', query=label.lower(), fields=['surface_form_keyword'], boost=5),
+                          Q({"fuzzy": {"surface_form_keyword": q}})
                           ],
-                    should=[Q('match', description=q)])
+                    should=[Q('match', description=label.lower())])
         return [hit['uri'] for hit in s.execute()]
 
 
