@@ -1,10 +1,13 @@
+from generators import ContextGenerator
 from generators.baselines import ESLookup
 from SPARQLWrapper import SPARQLWrapper, JSON
 from allennlp.commands.elmo import ElmoEmbedder
 import numpy as np
 
-class FastElmo:
+
+class FastElmo(ContextGenerator):
     def __init__(self):
+        super().__init__()
         self._lookup = ESLookup()
         self.elmo_model = ElmoEmbedder()
         self._sparql = SPARQLWrapper("http://dbpedia.org/sparql")
@@ -31,6 +34,9 @@ class FastElmo:
         # TODO refinement/re-ranking
 
         return candidates
+
+    def search_context(self, label, context):
+        pass
 
     def get_embeddings_from_sentence(self, text, mode="layer_2", aggregate= False):
         """
