@@ -2,6 +2,7 @@ from tqdm import tqdm
 
 from generators import SimpleGenerator, ContextGenerator
 from generators.baselines import ESLookup
+from generators.ours import FastElmo
 from gs import GSEnum
 
 
@@ -9,32 +10,42 @@ class Evaluator:
     def __init__(self, gs: GSEnum):
         self._gs = gs.get_df()
 
-    def _call_search(self, generator, row):
+    @staticmethod
+    def _get_candidates(row, generator):
         raise NotImplementedError
 
     def score(self, generator):
+        total = self._gs.shape[0]
+
+        tqdm.pandas()
+        self._gs['candidates'] = self._gs.progress_apply(self._get_candidates, args=(generator,), axis=1)
+
         correct = 0
-        total = 0
-        empty = 0
-        for index, row in tqdm(self._gs.iterrows(), total=self._gs.shape[0]):
-            result = self._call_search(generator, row)
+        missing = 0
 
-            total = total + 1
-
-            if not result:
-                empty = empty + 1
-            elif result[0] in row["entities"].split():
+        for row in self._gs.itertuples():
+            if not row.candidates:
+                missing = missing + 1
+            elif row.candidates[0] in row.entities:
                 correct = correct + 1
 
-        return correct, empty, total, correct / total
+        return {'correct': correct,
+                'missing': missing,
+                'wrong': total - correct - missing,
+                'P': correct / total}
 
 
 class SimpleEvaluator(Evaluator):
-    def _call_search(self, generator: SimpleGenerator, row):
+    @staticmethod
+    def _get_candidates(row, generator: SimpleGenerator):
         return generator.search(label=row['label'])
 
 
 class ContextEvaluator(Evaluator):
-    def _call_search(self, generator: ContextGenerator, row):
-        return generator.search_context(label=row['label'], context=row['context'])
+    @staticmethod
+    def _get_candidates(row, generator: ContextGenerator):
+        return generator.search(label=row['label'], context=row['context'])
 
+
+print(ContextEvaluator(GSEnum.CEA_ROUND1).score(FastElmo()))
+print(SimpleEvaluator(GSEnum.CEA_ROUND1).score(ESLookup()))
