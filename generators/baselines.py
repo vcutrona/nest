@@ -1,3 +1,4 @@
+import requests
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 
@@ -42,9 +43,46 @@ class ESLookup(SimpleGenerator):
         return [hit['uri'] for hit in self.search_docs(label)]
 
 
+class WikipediaSearch(SimpleGenerator):
+
+    def __init__(self, config='WikipediaSearch'):
+        super().__init__(config)
+        self._session = requests.Session()
+
+    def search(self, label):
+
+        params = {
+            "action": "opensearch",
+            "search": label,
+            "format": "json"
+        }
+
+        response = self._session.get(url=self._config['url'], params=params).json()
+        return [x.replace("https://en.wikipedia.org/wiki/", "http://dbpedia.org/resource/") for x in response[3]]
+
+
+class DBLookup(SimpleGenerator):
+
+    def __init__(self, config='DBLookup'):
+        super().__init__(config)
+        self._session = requests.Session()
+
+    def search(self, label):
+        params = {
+            "QueryString": label
+        }
+
+        self._session.headers.update({'Accept': 'application/json'})
+        response = self._session.get(url=self._config['url'], params=params).json()
+        return [x['uri'] for x in response['results']]
+
+
 class Mantis(ContextGenerator):
     def __init__(self, config='Mantis'):
         super().__init__(config)
 
     def search(self, label, context):
         pass
+
+
+print(DBLookup().search("Barack"))
