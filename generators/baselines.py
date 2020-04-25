@@ -51,6 +51,9 @@ class WikipediaSearch(SimpleGenerator):
 
     def search(self, label):
 
+        if not label.strip():  # WARNING: there are empty cells in the GS!
+            return []
+
         params = {
             "action": "opensearch",
             "search": label,
