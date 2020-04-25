@@ -83,6 +83,3 @@ class Mantis(ContextGenerator):
 
     def search(self, label, context):
         pass
-
-
-print(DBLookup().search("Barack"))

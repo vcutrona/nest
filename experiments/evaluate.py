@@ -1,8 +1,6 @@
 from tqdm import tqdm
 
 from generators import SimpleGenerator, ContextGenerator
-from generators.baselines import ESLookup
-from generators.ours import FastElmo
 from gs import GSEnum
 
 
@@ -45,7 +43,3 @@ class ContextEvaluator(Evaluator):
     @staticmethod
     def _get_candidates(row, generator: ContextGenerator):
         return generator.search(label=row['label'], context=row['context'])
-
-
-print(ContextEvaluator(GSEnum.CEA_ROUND1).score(FastElmo()))
-print(SimpleEvaluator(GSEnum.CEA_ROUND1).score(ESLookup()))

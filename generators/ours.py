@@ -1,5 +1,3 @@
-from enum import Enum
-
 import numpy
 from SPARQLWrapper import SPARQLWrapper, JSON
 from allennlp.commands.elmo import ElmoEmbedder
