@@ -1,5 +1,8 @@
 resources/
-gs/*/
+gt/*/
+gt/*.csv
+gt/*.sh
+gt/*.txt
 scripts/
 
 # Created by https://www.gitignore.io/api/python,virtualenv,jupyternotebooks
