@@ -12,4 +12,7 @@ class GTEnum(Enum):
     CEA_ROUND4 = 'CEA_Round4.csv'
 
     def get_df(self):
-        return pd.read_csv(os.path.join(os.path.dirname(__file__), self.value), dtype=str, keep_default_na=False)
+        return pd.read_csv(os.path.join(os.path.dirname(__file__), self.value),
+                           dtype={'table': str, 'col_id': int, 'row_id': int, 'label': str,
+                                  'context': str, 'entities': str},
+                           keep_default_na=False)

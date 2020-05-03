@@ -1,8 +1,10 @@
-resources/
+cache/
+experiments/*.csv
 gt/*/
 gt/*.csv
 gt/*.sh
 gt/*.txt
+resources/
 scripts/
 
 # Created by https://www.gitignore.io/api/python,virtualenv,jupyternotebooks

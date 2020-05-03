@@ -1,5 +1,5 @@
 import requests
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, TransportError
 from elasticsearch_dsl import Search, Q
 
 from generators import SimpleGenerator, ContextGenerator
@@ -40,44 +40,61 @@ class ESLookup(SimpleGenerator):
         :param label:
         :return: a list of URIs
         """
-        return [hit['uri'] for hit in self.search_docs(label)]
+        results = []
+        for short_label in self._get_short_labels(label):
+            try:
+                results = results + [hit['uri'] for hit in self.search_docs(short_label)]
+            except TransportError:  # it happens on very long labels
+                continue  # labels are sorted by len (reverse) -> skip this iteration
+
+        return list(dict.fromkeys(results))
 
 
 class WikipediaSearch(SimpleGenerator):
-
     def __init__(self, config='WikipediaSearch'):
         super().__init__(config)
         self._session = requests.Session()
 
     def search(self, label):
+        results = []
+        for short_label in self._get_short_labels(label):
 
-        if not label.strip():  # WARNING: there are empty cells in the GS!
-            return []
+            params = {
+                "action": "opensearch",
+                "search": short_label,
+                "format": "json"
+            }
 
-        params = {
-            "action": "opensearch",
-            "search": label,
-            "format": "json"
-        }
+            response = self._session.get(url=self._config['url'], params=params).json()
 
-        response = self._session.get(url=self._config['url'], params=params).json()
-        return [x.replace("https://en.wikipedia.org/wiki/", "http://dbpedia.org/resource/") for x in response[3]]
+            try:
+                results = results + [x.replace("https://en.wikipedia.org/wiki/", "http://dbpedia.org/resource/")
+                                     for x in response[3]]
+            except KeyError:  # the result is a dict, not a list -> error
+                if 'error' in response and response['error']['code'] == 'request_too_long':
+                    continue
+                raise Exception  # something different happened -> inspect it
+
+        return list(dict.fromkeys(results))
 
 
 class DBLookup(SimpleGenerator):
-
     def __init__(self, config='DBLookup'):
         super().__init__(config)
         self._session = requests.Session()
 
     def search(self, label):
-        params = {
-            "QueryString": label
-        }
+        results = []
+        for short_label in self._get_short_labels(label):
+            params = {
+                "QueryString": short_label
+            }
 
-        self._session.headers.update({'Accept': 'application/json'})
-        response = self._session.get(url=self._config['url'], params=params).json()
-        return [x['uri'] for x in response['results']]
+            self._session.headers.update({'Accept': 'application/json'})
+            response = self._session.get(url=self._config['url'], params=params).json()
+            results = results + [x['uri'] for x in response['results']]
+
+        return list(dict.fromkeys(results))
 
 
 class Mantis(ContextGenerator):
