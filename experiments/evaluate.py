@@ -1,23 +1,26 @@
 import csv
+import multiprocessing as mp
 import os
 
 import pandas as pd
-from diskcache import Cache
 
 from generators import Generator, SimpleGenerator, ContextGenerator
 from gt import GTEnum
 
-import swifter  # DO NOT REMOVE!
 
-cache = Cache('cache')
+def call_evaluator(labels, generator):
+    return generator().multi_search(labels)
 
 
 class Evaluator:
 
-    def __init__(self, generator: Generator):
+    def __init__(self, generator: Generator, threads, chunk_size):
         self._generator = generator
+        assert threads > 0
+        self._threads = threads
+        self._chunk_size = chunk_size
 
-    def _get_candidates(self, row_tuple):
+    def _get_candidates(self, labels, contexts):
         raise NotImplementedError
 
     def _compute(self, gt):
@@ -72,22 +75,20 @@ class Evaluator:
         #         logger.info('Saving checkpoint... (%.2f%%)' % (dataset.shape[0] / gt_original_size * 100))
 
         dataset = gt.get_df()
-        dataset['candidates'] = dataset.swifter.apply(self._get_candidates, axis=1)
-        dataset['candidates'] = dataset['candidates'].swifter.apply(lambda x: ' '.join(map(str, x)))
+        results = self._get_candidates(dataset['label'].values.tolist(), dataset['context'].values.tolist())
+
+        dataset['candidates'] = [" ".join(candidates) for candidates in results[0].values()]
+
+        # dataset['candidates'] =
+            # dataset['candidates'] = dataset.swifter.apply(self._get_candidates, axis=1)
+            # dataset['candidates'] = dataset['candidates'].swifter.apply(lambda x: ' '.join(map(str, x)))
+            # else:
+            # tqdm.pandas()
+            # dataset['candidates'] = dataset.progress_apply(self._get_candidates, axis=1)
+            # dataset['candidates'] = dataset['candidates'].progress_apply(lambda x: ' '.join(map(str, x)))
         dataset.to_csv(filename, quoting=csv.QUOTE_ALL, index=False)
-        print('Actual cache size: %.2f MB' % (cache.volume() / 1024 / 1024))
+        # print('Actual cache size: %.2f MB' % (cache.volume() / 1024 / 1024))
         return dataset
-
-    def score_all(self, exclude=None):
-        gts = []
-        for gt in GTEnum:
-            if exclude and gt in exclude:
-                continue
-            gts.append(gt)
-        return self._score(gts)
-
-    def score(self, gt):
-        return self._score([gt])
 
     def _score(self, gts):
         results = {}
@@ -111,42 +112,40 @@ class Evaluator:
 
         return {self._generator.__class__.__name__: results}
 
+    def score_all(self, exclude=None):
+        gts = []
+        for gt in GTEnum:
+            if exclude and gt in exclude:
+                continue
+            gts.append(gt)
+        return self._score(gts)
+
+    def score(self, gt):
+        return self._score([gt])
+
 
 class SimpleEvaluator(Evaluator):
-    def __init__(self, generator: SimpleGenerator):
-        super().__init__(generator)
+    def __init__(self, generator: SimpleGenerator, threads=mp.cpu_count(), chunk_size=100):
+        super().__init__(generator, threads, chunk_size)
 
-    def _get_candidates(self, row_tuple):
-        k = (row_tuple.label, self._generator.__class__.__name__)
-        result = self._generator.search(label=row_tuple.label)
-        cache.set(k, result)
-        return cache[k]
+    def _chunk_it(self, labels):
+        for i in range(0, len(labels), self._chunk_size):
+            yield labels[i:i + self._chunk_size]
 
-
-class SimpleCachedEvaluator(SimpleEvaluator):
-    def _get_candidates(self, row_tuple):
-        k = (row_tuple.label, self._generator.__class__.__name__)
-        result = cache.get(k)
-        if result is None:
-            cache.add(k, self._generator.search(label=row_tuple.label))
-        return cache[k]
+    def _get_candidates(self, labels, contexts):
+        p = mp.Pool(self._threads)
+        return p.starmap(call_evaluator, [(chunk, self._generator.__class__) for chunk in self._chunk_it(labels)])
 
 
 class ContextEvaluator(Evaluator):
-    def __init__(self, generator: ContextGenerator):
-        super().__init__(generator)
+    def __init__(self, generator: ContextGenerator, threads=mp.cpu_count(), chunk_size=100):
+        super().__init__(generator, threads, chunk_size)
 
-    def _get_candidates(self, row_tuple):
-        k = (row_tuple.label, row_tuple.context, self._generator.__class__.__name__)
-        result = self._generator.search(label=row_tuple.label, context=row_tuple.context)
-        cache.set(k, result)
-        return cache[k]
+    def _chunk_it(self, labels, contexts):
+        for i in range(0, len(labels), self._chunk_size):
+            yield labels[i:i + self._chunk_size]  # todo: zip
 
+    def _get_candidates(self, labels, contexts):
+        p = mp.Pool(self._threads)
+        return p.map(self._generator.multi_search, self._chunk_it(labels, contexts))
 
-class ContextCachedEvaluator(ContextEvaluator):
-    def _get_candidates(self, row_tuple):
-        k = (row_tuple.label, row_tuple.context, self._generator.__class__.__name__)
-        result = cache.get(k)
-        if result is None:
-            cache.add(k, self._generator.search(label=row_tuple.label, context=row_tuple.context))
-        return cache[k]

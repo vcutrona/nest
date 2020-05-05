@@ -35,19 +35,16 @@ class ESLookup(SimpleGenerator):
                     should=[Q('match', description=label.lower())])
         return [hit for hit in s.execute()]
 
-    def search(self, label):
-        """
-        :param label:
-        :return: a list of URIs
-        """
-        results = []
-        for short_label in self._get_short_labels(label):
-            try:
-                results = results + [hit['uri'] for hit in self.search_docs(short_label)]
-            except TransportError:  # it happens on very long labels
-                continue  # labels are sorted by len (reverse) -> skip this iteration
+    def _get_es_docs(self, labels):
+        for label in labels:
+            yield label, self.search_docs(label)
 
-        return list(dict.fromkeys(results))
+    def _multi_search(self, labels):
+        for label, result in self._get_es_docs(self._get_short_labels_set(labels)):
+            try:
+                yield label, [hit['uri'] for hit in result]
+            except TransportError:
+                continue
 
 
 class WikipediaSearch(SimpleGenerator):
@@ -55,46 +52,42 @@ class WikipediaSearch(SimpleGenerator):
         super().__init__(config)
         self._session = requests.Session()
 
-    def search(self, label):
-        results = []
-        for short_label in self._get_short_labels(label):
-
+    def _get_wiki_docs(self, labels):
+        for label in labels:
             params = {
                 "action": "opensearch",
-                "search": short_label,
+                "search": label,
                 "format": "json"
             }
 
-            response = self._session.get(url=self._config['url'], params=params).json()
+            yield label, self._session.get(url=self._config['url'], params=params).json()
 
+    def _multi_search(self, labels):
+        for label, result in self._get_wiki_docs(self._get_short_labels_set(labels)):
             try:
-                results = results + [x.replace("https://en.wikipedia.org/wiki/", "http://dbpedia.org/resource/")
-                                     for x in response[3]]
-            except KeyError:  # the result is a dict, not a list -> error
-                if 'error' in response and response['error']['code'] == 'request_too_long':
+                yield label, [x.replace("https://en.wikipedia.org/wiki/", "http://dbpedia.org/resource/") for x in result[3]]
+            except KeyError:
+                if 'error' in result and result['error']['code'] == 'request_too_long':
                     continue
                 raise Exception  # something different happened -> inspect it
-
-        return list(dict.fromkeys(results))
 
 
 class DBLookup(SimpleGenerator):
     def __init__(self, config='DBLookup'):
         super().__init__(config)
         self._session = requests.Session()
+        self._session.headers.update({'Accept': 'application/json'})
 
-    def search(self, label):
-        results = []
-        for short_label in self._get_short_labels(label):
+    def _get_db_docs(self, labels):
+        for label in labels:
             params = {
-                "QueryString": short_label
+                "QueryString": label
             }
+            yield label, self._session.get(url=self._config['url'], params=params).json()
 
-            self._session.headers.update({'Accept': 'application/json'})
-            response = self._session.get(url=self._config['url'], params=params).json()
-            results = results + [x['uri'] for x in response['results']]
-
-        return list(dict.fromkeys(results))
+    def _multi_search(self, labels):
+        for label, result in self._get_db_docs(self._get_short_labels_set(labels)):
+            yield label, [x['uri'] for x in result['results']]
 
 
 class Mantis(ContextGenerator):
