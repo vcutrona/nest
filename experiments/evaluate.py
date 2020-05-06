@@ -21,7 +21,7 @@ class Evaluator:
         filename = os.path.join(os.path.dirname(__file__),
                                 '%s_%s_candidates.csv' % (self._generator.__class__.__name__, gt.name))
 
-        if os.path.isfile(filename):  # already processed file -> return results
+        if os.path.isfile(filename) and isinstance(gt, GTEnum):  # already processed file -> return results (skip tests)
             print('Got results from %s' % filename)
             return pd.read_csv(filename,
                                dtype={'table': str, 'col_id': int, 'row_id': int, 'label': str,
@@ -32,7 +32,8 @@ class Evaluator:
         results = self._get_candidates(dataset['label'].values.tolist(), dataset['context'].values.tolist())
         results = {label: " ".join(candidates) for label, candidates in results.items()}
         dataset['candidates'] = dataset['label'].map(results)  # TODO: it works only for simple generators!
-        dataset.to_csv(filename, quoting=csv.QUOTE_ALL, index=False)
+        if isinstance(gt, GTEnum):
+            dataset.to_csv(filename, quoting=csv.QUOTE_ALL, index=False)
         return dataset
 
     def _score(self, gts):

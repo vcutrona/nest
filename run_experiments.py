@@ -4,12 +4,13 @@ from generators.baselines import ESLookup, WikipediaSearch, DBLookup
 from gt import GTEnum
 
 evaluators = [
-    SimpleEvaluator(ESLookup(threads=4)),
+    SimpleEvaluator(ESLookup(threads=6)),
     SimpleEvaluator(WikipediaSearch()),
     SimpleEvaluator(DBLookup()),
     # ContextEvaluator(FastElmo())
 ]
 
 for evaluator in evaluators:
-    print(evaluator.score_all(exclude=[GTEnum.TEST]))
-    # print(evaluator.score(GTEnum.TEST))
+    print(evaluator.score_all())
+    # print(evaluator.score(GTEnum.get_test_gt(size=100, from_gt=GTEnum.CEA_ROUND1, random=False)))
+

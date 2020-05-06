@@ -5,7 +5,6 @@ import pandas as pd
 
 
 class GTEnum(Enum):
-    TEST = 'TEST.csv'
     CEA_ROUND1 = 'CEA_Round1.csv'
     CEA_ROUND2 = 'CEA_Round2.csv'
     CEA_ROUND3 = 'CEA_Round3.csv'
@@ -16,3 +15,15 @@ class GTEnum(Enum):
                            dtype={'table': str, 'col_id': int, 'row_id': int, 'label': str,
                                   'context': str, 'entities': str},
                            keep_default_na=False)
+
+    @classmethod
+    def get_test_gt(cls, size, from_gt=None, random=False):
+        if from_gt is None:
+            from_gt = cls.CEA_ROUND1
+        if random:
+            df = from_gt.get_df().sample(size)
+        else:
+            df = from_gt.get_df()[:size]
+        tmp = Enum('GTTestEnum', {'%s_TEST_%drows' % (from_gt.name, size): df})  # create a temp enum (name: df)
+        setattr(tmp, 'get_df', lambda x: x.value)  # add the get_df function, that returns the df
+        return list(tmp)[0]
