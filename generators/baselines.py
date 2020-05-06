@@ -34,7 +34,10 @@ class ESLookup(SimpleGenerator):
                               Q({"fuzzy": {"surface_form_keyword": q}})
                               ],
                         should=[Q('match', description=label.lower())])
-            yield label, [hit for hit in s.execute()]
+            try:
+                yield label, [hit for hit in s.execute()]
+            except TransportError:
+                yield label, []
 
     def _multi_search(self, labels):
         results = {}
@@ -44,10 +47,7 @@ class ESLookup(SimpleGenerator):
                     results[label] = []
                 short_labels_of_label = self._get_short_labels(label)
                 if short_label in short_labels_of_label:
-                    try:
-                        results[label].append((short_label, [hit['uri'] for hit in result]))
-                    except TransportError:
-                        continue
+                    results[label].append((short_label, [hit['uri'] for hit in result]))
         return list(results.items())
 
 
