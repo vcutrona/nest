@@ -1,4 +1,5 @@
 import functools
+from tqdm.contrib.concurrent import process_map
 import multiprocessing as mp
 import operator
 import os
@@ -69,18 +70,19 @@ class SimpleGenerator(Generator):
             if self._config.getboolean('cache'):
                 cache_key = (label, self.__class__.__name__)
                 entry = cache.get(cache_key)
-                if entry is not None:
-                    cached_entries.append((label, entry))
-                else:
+                if entry is None:
                     to_compute.append(label)
+                else:
+                    cached_entries.append((label, entry))
             else:
                 to_compute.append(label)
 
         new_entries = []
         if to_compute:
             if self._threads > 1:
-                p = mp.Pool(self._threads)
-                new_entries = functools.reduce(operator.iconcat, p.map(self._multi_search, self._chunk_it(to_compute)), [])
+                # p = mp.Pool(self._threads)
+                # new_entries = functools.reduce(operator.iconcat, p.map(self._multi_search, self._chunk_it(to_compute)), [])
+                new_entries = functools.reduce(operator.iconcat, process_map(self._multi_search, list(self._chunk_it(to_compute)), max_workers=self._threads), [])
             else:
                 new_entries = self._multi_search(to_compute)
 
