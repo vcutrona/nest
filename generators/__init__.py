@@ -1,6 +1,6 @@
 import functools
 from tqdm.contrib.concurrent import process_map
-import multiprocessing as mp
+# import multiprocessing as mp
 import operator
 import os
 from abc import ABC
@@ -47,55 +47,68 @@ class Generator(ABC):
 
 
 class SimpleGenerator(Generator):
-    def _multi_search(self, labels):
+    def _get_candidates(self, labels):
         raise NotImplementedError
 
     def _chunk_it(self, labels):
         for i in range(0, len(labels), self._chunk_size):
             yield labels[i:i + self._chunk_size]
 
-    def _update_cache(self, label, candidates):
-        cache_key = (label, self.__class__.__name__)
-        if self._config.getboolean('cache'):
-            cache.add(cache_key, candidates)  # not override existing entries, but add new entries
-        else:
-            cache.set(cache_key, candidates)  # override everything!
+    def _get_cache_key(self, label):
+        return label, self.__class__.__name__
 
-    def multi_search(self, labels):
-        cached_entries = []
+    def _update_cache(self, entries):
+        for label, candidates in entries:
+            cache.set(self._get_cache_key(label), candidates)  # override everything ALWAYS!
+
+    def _get_cached_entries(self, labels):
         to_compute = []
-
-        # collect results from cache, if active
+        cached_entries = []
         for label in labels:
-            if self._config.getboolean('cache'):
-                cache_key = (label, self.__class__.__name__)
-                entry = cache.get(cache_key)
-                if entry is None:
-                    to_compute.append(label)
-                else:
-                    cached_entries.append((label, entry))
-            else:
+
+            cache_key = self._get_cache_key(label)
+            entry = cache.get(cache_key)
+            if entry is None:
                 to_compute.append(label)
+            else:
+                cached_entries.append((label, entry))
+
+        return cached_entries, to_compute
+
+    def _multi_search(self, labels):
+        cached_entries, to_compute = [], labels
+        if self._config.getboolean('cache'):
+            cached_entries, to_compute = self._get_cached_entries(labels)
+
+        new_short_entries = list(self._get_candidates(self._get_short_labels_set(to_compute)))
+        self._update_cache(filter(lambda x: x[0] not in labels, new_short_entries))  # cache short entries
+
+        new_short_entries_dict = dict(new_short_entries)
 
         new_entries = []
-        if to_compute:
-            if self._threads > 1:
-                # p = mp.Pool(self._threads)
-                # new_entries = functools.reduce(operator.iconcat, p.map(self._multi_search, self._chunk_it(to_compute)), [])
-                new_entries = functools.reduce(operator.iconcat, process_map(self._multi_search, list(self._chunk_it(to_compute)), max_workers=self._threads), [])
-            else:
-                new_entries = self._multi_search(to_compute)
-
-        for label, short_entries in new_entries:
+        for label in to_compute:
             label_candidates = []
-            for short_label, short_label_candidates in short_entries:
-                self._update_cache(short_label, short_label_candidates)
-                label_candidates = label_candidates + short_label_candidates  # append the candidates to the long label
-            label_candidates = list(dict.fromkeys(label_candidates))
-            self._update_cache(label, label_candidates)  # it might happen that label == a short labels -  no matter
-            cached_entries.append((label, label_candidates))  # return only the long labels
+            short_labels_of_label = self._get_short_labels(label)
+            for short_label in short_labels_of_label:
+                label_candidates = label_candidates + new_short_entries_dict[short_label]  # append candidates to the long label
+            new_entries.append((label, list(dict.fromkeys(label_candidates))))  # remove duplicates without sorting
+        self._update_cache(new_entries)  # cache new entries
 
-        return dict(cached_entries)
+        return cached_entries + new_entries
+
+    def multi_search(self, labels):
+        if self._threads > 1:
+            # p = mp.Pool(self._threads)
+            # results = functools.reduce(operator.iconcat, p.map(self._multi_search, self._chunk_it(to_compute)), [])
+            results = functools.reduce(operator.iconcat,
+                                       process_map(self._multi_search,
+                                                   list(self._chunk_it(labels)),
+                                                   max_workers=self._threads),
+                                       [])
+        else:
+            results = self._multi_search(labels)
+
+        return dict(results)
 
     def search(self, label):
         return self.multi_search([label])

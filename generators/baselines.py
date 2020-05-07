@@ -8,11 +8,20 @@ from generators import SimpleGenerator, ContextGenerator
 
 
 class ESLookup(SimpleGenerator):
-    def __init__(self, config='ES', threads=mp.cpu_count(), chunk_size=1000):
+    def __init__(self, config='ES', threads=mp.cpu_count(), chunk_size=10000):
         super().__init__(config, threads, chunk_size)
+        d = dict(self._config)
+        self._cache_key_suffix = "%s_%s" % (self.__class__.__name__,
+                                            "|".join(sorted(["%s:%s" % (k, d[k])
+                                                             for k in d if k in ['fuzziness',
+                                                                                 'prefix_length',
+                                                                                 'max_expansions']])))
+
+    def _get_cache_key(self, label):
+        return label, self._cache_key_suffix
 
     def _get_es_docs(self, labels):
-        # CRITICAL: DO NOT set the ES client instance as a class member: it is not pickable! -> no parallel execution
+        # CRITICAL: DO NOT set the ES client instance as a class member: it is not picklable! -> no parallel execution
         elastic = Elasticsearch(self._config['host'])
 
         for label in labels:
@@ -39,20 +48,13 @@ class ESLookup(SimpleGenerator):
             except TransportError:
                 yield label, []
 
-    def _multi_search(self, labels):
-        results = {}
-        for short_label, result in self._get_es_docs(self._get_short_labels_set(labels)):
-            for label in labels:
-                if label not in results:
-                    results[label] = []
-                short_labels_of_label = self._get_short_labels(label)
-                if short_label in short_labels_of_label:
-                    results[label].append((short_label, [hit['uri'] for hit in result]))
-        return list(results.items())
+    def _get_candidates(self, labels):
+        return [(short_label, [hit['uri'] for hit in candidates])
+                for short_label, candidates in self._get_es_docs(labels)]
 
 
 class WikipediaSearch(SimpleGenerator):
-    def __init__(self, config='WikipediaSearch', threads=4, chunk_size=100):
+    def __init__(self, config='WikipediaSearch', threads=3, chunk_size=10000):
         super().__init__(config, threads, chunk_size)
         self._session = requests.Session()
 
@@ -63,30 +65,17 @@ class WikipediaSearch(SimpleGenerator):
                 "search": label,
                 "format": "json"
             }
-
             yield label, self._session.get(url=self._config['url'], params=params).json()
 
-    def _multi_search(self, labels):
-        results = {}
-        for short_label, result in self._get_wiki_docs(self._get_short_labels_set(labels)):
-            for label in labels:
-                if label not in results:
-                    results[label] = []
-                short_labels_of_label = self._get_short_labels(label)
-                if short_label in short_labels_of_label:
-                    try:
-                        results[label].append((short_label,
-                                               [x.replace("https://en.wikipedia.org/wiki/", "http://dbpedia.org/resource/")
-                                                for x in result[3]]))
-                    except KeyError:
-                        if 'error' in result and result['error']['code'] == 'request_too_long':
-                            continue
-                        raise Exception  # something different happened -> inspect it
-        return list(results.items())
+    def _get_candidates(self, labels):
+        return [(short_label, [x.replace("https://en.wikipedia.org/wiki/",
+                                         "http://dbpedia.org/resource/") for x in result[3]])
+                if isinstance(result, list) else (short_label, [])
+                for short_label, result in self._get_wiki_docs(labels)]
 
 
 class DBLookup(SimpleGenerator):
-    def __init__(self, config='DBLookup', threads=4, chunk_size=100):
+    def __init__(self, config='DBLookup', threads=3, chunk_size=10000):
         super().__init__(config, threads, chunk_size)
         self._session = requests.Session()
         self._session.headers.update({'Accept': 'application/json'})
@@ -98,16 +87,9 @@ class DBLookup(SimpleGenerator):
             }
             yield label, self._session.get(url=self._config['url'], params=params).json()
 
-    def _multi_search(self, labels):
-        results = {}
-        for short_label, result in self._get_db_docs(self._get_short_labels_set(labels)):
-            for label in labels:
-                if label not in results:
-                    results[label] = []
-                short_labels_of_label = self._get_short_labels(label)
-                if short_label in short_labels_of_label:
-                    results[label].append((short_label, [x['uri'] for x in result['results']]))
-        return list(results.items())
+    def _get_candidates(self, labels):
+        return [(short_label, [x['uri'] for x in result['results']])
+                for short_label, result in self._get_db_docs(labels)]
 
 
 class Mantis(ContextGenerator):
