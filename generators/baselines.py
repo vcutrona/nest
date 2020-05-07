@@ -16,6 +16,7 @@ class ESLookup(SimpleGenerator):
                                                              for k in d if k in ['fuzziness',
                                                                                  'prefix_length',
                                                                                  'max_expansions']])))
+        assert Elasticsearch(self._config['host']).ping()  # check if the server is up and running
 
     def _get_cache_key(self, label):
         return label, self._cache_key_suffix
@@ -25,7 +26,7 @@ class ESLookup(SimpleGenerator):
         elastic = Elasticsearch(self._config['host'])
 
         for label in labels:
-            s = Search(using=elastic)
+            s = Search(using=elastic, index=self._config['index'])
             q = {'value': label.lower()}
 
             if self._config['fuzziness']:
