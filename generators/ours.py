@@ -99,7 +99,9 @@ class FastElmo(ContextGenerator):
 
 
 class FastTransformers(ContextGenerator):
+    """
 
+    """
     def __init__(self, config='FastTransformer'):
         super().__init__(config)
         self.model = SentenceTransformer(self._config['model'])
