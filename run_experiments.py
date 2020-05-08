@@ -4,9 +4,9 @@ from generators.baselines import ESLookup, WikipediaSearch, DBLookup
 from gt import GTEnum
 
 evaluators = [
-    SimpleEvaluator(WikipediaSearch(chunk_size=1000)),
-    SimpleEvaluator(DBLookup()),
+    SimpleEvaluator(WikipediaSearch()),
     SimpleEvaluator(ESLookup(threads=6)),
+    SimpleEvaluator(DBLookup()),
     # ContextEvaluator(FastElmo())
 ]
 

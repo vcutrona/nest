@@ -45,14 +45,19 @@ class Generator(ABC):
 
         return list(dict.fromkeys(ext_labels))
 
+    def _chunk_it(self, _list):
+        """
+        Utility function to split a list into chunks of size self._chunk_size.
+        :param _list: the list to split
+        :return:
+        """
+        for i in range(0, len(_list), self._chunk_size):
+            yield _list[i:i + self._chunk_size]
+
 
 class SimpleGenerator(Generator):
     def _get_candidates(self, labels):
         raise NotImplementedError
-
-    def _chunk_it(self, labels):
-        for i in range(0, len(labels), self._chunk_size):
-            yield labels[i:i + self._chunk_size]
 
     def _get_cache_key(self, label):
         return label, self.__class__.__name__
@@ -64,8 +69,8 @@ class SimpleGenerator(Generator):
     def _get_cached_entries(self, labels):
         to_compute = []
         cached_entries = []
-        for label in labels:
 
+        for label in labels:
             cache_key = self._get_cache_key(label)
             entry = cache.get(cache_key)
             if entry is None:
