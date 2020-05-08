@@ -10,12 +10,14 @@ from generators import SimpleGenerator, ContextGenerator
 class ESLookup(SimpleGenerator):
     def __init__(self, config='ES', threads=mp.cpu_count(), chunk_size=10000):
         super().__init__(config, threads, chunk_size)
+        if 'size' not in self._config.keys():
+            self._config['size'] = '10'  # it is the default value set by ES
+
         d = dict(self._config)
         self._cache_key_suffix = "%s_%s" % (self.__class__.__name__,
                                             "|".join(sorted(["%s:%s" % (k, d[k])
-                                                             for k in d if k in ['fuzziness',
-                                                                                 'prefix_length',
-                                                                                 'max_expansions']])))
+                                                             for k in d if k in ['size', 'fuzziness',
+                                                                                 'prefix_length',   'max_expansions']])))
         assert Elasticsearch(self._config['host']).ping()  # check if the server is up and running
 
     def _get_cache_key(self, label):
@@ -24,19 +26,19 @@ class ESLookup(SimpleGenerator):
     def _get_es_docs(self, labels):
         # CRITICAL: DO NOT set the ES client instance as a class member: it is not picklable! -> no parallel execution
         elastic = Elasticsearch(self._config['host'])
-
+        config_keys = self._config.keys()
         for label in labels:
             s = Search(using=elastic, index=self._config['index'])
             q = {'value': label.lower()}
 
-            if self._config['fuzziness']:
+            if 'fuzziness' in config_keys:
                 if self._config['fuzziness'] != 'AUTO':
                     q['fuzziness'] = int(self._config['fuzziness'])
                 else:
                     q['fuzziness'] = self._config['fuzziness']
-            if self._config['prefix_length']:
+            if 'prefix_length' in config_keys:
                 q['prefix_length'] = int(self._config['prefix_length'])
-            if self._config['max_expansions']:
+            if 'max_expansions' in config_keys:
                 q['max_expansions'] = int(self._config['max_expansions'])
 
             s.query = Q('bool',
@@ -44,6 +46,9 @@ class ESLookup(SimpleGenerator):
                               Q({"fuzzy": {"surface_form_keyword": q}})
                               ],
                         should=[Q('match', description=label.lower())])
+            
+            s = s[0:int(self._config['size'])]
+
             try:
                 yield label, [hit for hit in s.execute()]
             except TransportError:
