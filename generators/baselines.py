@@ -60,7 +60,7 @@ class ESLookup(SimpleGenerator):
 
 
 class WikipediaSearch(SimpleGenerator):
-    def __init__(self, config='WikipediaSearch', threads=3, chunk_size=10000):
+    def __init__(self, config='WikipediaSearch', threads=3, chunk_size=1000):
         super().__init__(config, threads, chunk_size)
         self._session = requests.Session()
 
@@ -81,7 +81,7 @@ class WikipediaSearch(SimpleGenerator):
 
 
 class DBLookup(SimpleGenerator):
-    def __init__(self, config='DBLookup', threads=3, chunk_size=10000):
+    def __init__(self, config='DBLookup', threads=2, chunk_size=1000):
         super().__init__(config, threads, chunk_size)
         self._session = requests.Session()
         self._session.headers.update({'Accept': 'application/json'})
