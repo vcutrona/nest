@@ -2,6 +2,7 @@ import numpy
 from SPARQLWrapper import SPARQLWrapper, JSON
 from allennlp.commands.elmo import ElmoEmbedder
 from scipy.spatial.distance import cosine
+from sentence_transformers import SentenceTransformer
 
 from generators import ContextGenerator
 from generators.baselines import ESLookup
@@ -95,6 +96,16 @@ class FastElmo(ContextGenerator):
                     return [doc['uri'] for doc in sorted(candidates, key=lambda k: k['distance'])]
 
         return self._lookup.search(label)  # no context -> return basic lookup
+
+
+class FastTransformers(ContextGenerator):
+
+    def __init__(self, config='FastTransformer'):
+        super().__init__(config)
+        self.model = SentenceTransformer(self._config['model'])
+
+    def _get_embeddings_from_sentences(self, sentences):
+        return self.model.encode(sentences)
 
 
 # fe = FastElmo()
