@@ -85,8 +85,7 @@ class SimpleGenerator(Generator):
 
         # check which short labels have been already computed
         if self._config.getboolean('cache'):
-            cached_entries, to_compute = self._get_cached_entries(labels)
-
+            cached_entries, to_compute = self._get_cached_entries(to_compute)
         # compute all the unseen short labels
         new_entries = list(self._get_candidates(to_compute))
         self._update_cache(new_entries)  # write new entries to cache
