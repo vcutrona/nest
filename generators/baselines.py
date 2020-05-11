@@ -17,7 +17,7 @@ class ESLookup(SimpleGenerator):
         self._cache_key_suffix = "%s_%s" % (self.__class__.__name__,
                                             "|".join(sorted(["%s:%s" % (k, d[k])
                                                              for k in d if k in ['size', 'fuzziness',
-                                                                                 'prefix_length',   'max_expansions']])))
+                                                                                 'prefix_length', 'max_expansions']])))
         assert Elasticsearch(self._config['host']).ping()  # check if the server is up and running
 
     def _get_cache_key(self, label):
@@ -46,7 +46,7 @@ class ESLookup(SimpleGenerator):
                               Q({"fuzzy": {"surface_form_keyword": q}})
                               ],
                         should=[Q('match', description=label.lower())])
-            
+
             s = s[0:int(self._config['size'])]
 
             try:
@@ -102,5 +102,5 @@ class Mantis(ContextGenerator):
     def __init__(self, config='Mantis', threads=mp.cpu_count(), chunk_size=1000):
         super().__init__(config, threads, chunk_size)
 
-    def search(self, label, context):
+    def _multi_search(self, lc_pairs):
         pass

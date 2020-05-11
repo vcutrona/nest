@@ -1,46 +1,28 @@
+import os
+
 import numpy
-from SPARQLWrapper import SPARQLWrapper, JSON
 from allennlp.commands.elmo import ElmoEmbedder
-from scipy.spatial.distance import cosine
 from sentence_transformers import SentenceTransformer
 
-from generators import ContextGenerator
+from generators import EmbeddingContextGenerator
 from generators.baselines import ESLookup
 
 
-class FastElmo(ContextGenerator):
-    def __init__(self, config='FastElmo'):
-        super().__init__(config)
-        self._lookup = ESLookup()
-        self.elmo_model = ElmoEmbedder(cuda_device=0)
-        self._sparql = SPARQLWrapper(self._config['sparql_endpoint'])
-        self._sparql.setReturnFormat(JSON)
-        # TODO init BERT model
+class FastElmo(EmbeddingContextGenerator):
+    def __init__(self, config='FastElmo', lookup=ESLookup()):
+        super().__init__(config, 1, 0, lookup)  # force single-process execution
+        self._model = ElmoEmbedder(cuda_device=0,
+                                   weight_file=os.path.join(os.path.dirname(__file__),
+                                                            'elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5'),
+                                   options_file=os.path.join(os.path.dirname(__file__),
+                                                             'elmo_2x4096_512_2048cnn_2xhighway_options.json'))
+        d = dict(self._config)
+        self._cache_key_suffix = "%s_%s" % (self.__class__.__name__,
+                                            "|".join(sorted(["%s:%s" % (k, d[k])
+                                                             for k in d if k in ['abstract', 'abstract_max_tokens']])))
 
-    def _fetch_long_abstract(self, uri):
-        self._sparql.setQuery("""
-                                SELECT DISTINCT ?abstract
-                                WHERE {
-                                    <%s> dbo:abstract ?abstract.
-                                    FILTER (LANG(?abstract) = 'en' || LANG(?abstract) = '')
-                                }
-                            """ % uri)
-        results = self._sparql.query().convert()
-        return [result["abstract"]["value"] for result in results["results"]["bindings"]]
-
-    def _fetch_short_abstract(self, uri):
-        self._sparql.setQuery("""
-                                SELECT ?abstract
-                                WHERE {
-                                    <%s> dbo:abstract ?abstract.
-                                    FILTER (LANG(?abstract) = 'en' || LANG(?abstract) = '')
-                                }
-                            """ % uri)
-        results = self._sparql.query().convert()
-        return {result["abstract"]["value"] for result in results["results"]["bindings"]}
-
-    def _cut_abstract(self, abstract) -> str:
-        return " ".join(abstract.split(" ")[:int(self._config['abstract_max_tokens'])]).strip()
+    def _get_cache_key(self, label, context):
+        return label, context, self._cache_key_suffix
 
     def _get_embeddings_from_sentences(self, sentences, mode="layer_2"):
         """
@@ -50,7 +32,7 @@ class FastElmo(ContextGenerator):
                      "mean" gets the embedding of the three elmo layers for each token
         :return:
         """
-        model_outputs = self.elmo_model.embed_sentences([sentence.split() for sentence in sentences])
+        model_outputs = self._model.embed_sentences([sentence.split() for sentence in sentences])
         embeds = []
 
         if mode == "layer_2":
@@ -69,46 +51,23 @@ class FastElmo(ContextGenerator):
 
         return embeds
 
-    def search(self, label, context):
 
-        if context:  # no context -> nothing to compare with -> return basic lookup
-            context_emb = self._get_embeddings_from_sentences([context])[0]
-
-            if context_emb.size:  # guard: sometimes you get an empty array -> same as no context
-                if self._config['abstract'] == 'short':  # from the index
-                    candidates = [{'uri': doc['uri'], 'abstracts': doc['description']} for doc in
-                                  self._lookup.search_docs(label)]
-                else:  # from dbpedia (SPARQL query)
-                    candidate_uris = self._lookup.search(label)
-                    candidates = []
-                    for uri in candidate_uris:
-                        candidates.append({'uri': uri, 'abstracts': self._fetch_long_abstract(uri)})
-
-                abstracts = [self._cut_abstract(candidate['abstracts'][0]) if candidate['abstracts'] else ''
-                             for candidate in candidates]
-                if any(abstracts):  # no abstracts -> nothing to compare with -> return basic lookup
-                    abstract_embs = self._get_embeddings_from_sentences(abstracts)
-
-                    for idx, candidate in enumerate(candidates):
-                        candidate['distance'] = 2  # init value -> safe for cosine only!
-                        if abstract_embs[idx].size:  # guard: sometimes you get an empty array
-                            candidate['distance'] = cosine(abstract_embs[idx], context_emb)
-                    return [doc['uri'] for doc in sorted(candidates, key=lambda k: k['distance'])]
-
-        return self._lookup.search(label)  # no context -> return basic lookup
-
-
-class FastTransformers(ContextGenerator):
-    """
-
-    """
+class FastTransformers(EmbeddingContextGenerator):
     def __init__(self, config='FastTransformer'):
-        super().__init__(config)
-        self.model = SentenceTransformer(self._config['model'])
+        super().__init__(config, 1, 0, ESLookup())  # force single-process execution
+        self._model = SentenceTransformer(self._config['model'])
+
+        d = dict(self._config)
+        self._cache_key_suffix = "%s_%s" % (self.__class__.__name__,
+                                            "|".join(sorted(["%s:%s" % (k, d[k])
+                                                             for k in d if k in ['model', 'abstract',
+                                                                                 'abstract_max_tokens']])))
+
+    def _get_cache_key(self, label, context):
+        return label, context, self._cache_key_suffix
 
     def _get_embeddings_from_sentences(self, sentences):
-        return self.model.encode(sentences)
-
+        return self._model.encode(sentences)
 
 # fe = FastElmo()
 # print(fe.search("Bobtail", "Cat Female 7 10 Red"))  # breed, species, sex, age, weight, colour
