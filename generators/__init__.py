@@ -81,25 +81,25 @@ class SimpleGenerator(Generator):
         return cached_entries, to_compute
 
     def _multi_search(self, labels):
-        cached_entries, to_compute = [], labels
+        cached_entries, to_compute = [], self._get_short_labels_set(labels)
+
+        # check which short labels have been already computed
         if self._config.getboolean('cache'):
             cached_entries, to_compute = self._get_cached_entries(labels)
 
-        new_short_entries = list(self._get_candidates(self._get_short_labels_set(to_compute)))
-        self._update_cache(filter(lambda x: x[0] not in labels, new_short_entries))  # cache short entries
+        # compute all the unseen short labels
+        new_entries = list(self._get_candidates(to_compute))
+        self._update_cache(new_entries)  # write new entries to cache
 
-        new_short_entries_dict = dict(new_short_entries)
-
-        new_entries = []
-        for label in to_compute:
+        entries_dict = dict(cached_entries + new_entries)
+        results = []
+        for label in labels:  # aggregate results for short labels
             label_candidates = []
-            short_labels_of_label = self._get_short_labels(label)
-            for short_label in short_labels_of_label:
-                label_candidates = label_candidates + new_short_entries_dict[short_label]  # append candidates to the long label
-            new_entries.append((label, list(dict.fromkeys(label_candidates))))  # remove duplicates without sorting
-        self._update_cache(new_entries)  # cache new entries
+            for short_label in self._get_short_labels(label):
+                label_candidates = label_candidates + entries_dict[short_label]
+            results.append((label, list(dict.fromkeys(label_candidates))))  # remove duplicates without sorting
 
-        return cached_entries + new_entries
+        return results
 
     def multi_search(self, labels):
         if self._threads > 1:
