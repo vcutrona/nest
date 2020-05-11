@@ -1,5 +1,8 @@
 cache/
+experiments/*/
 experiments/*.csv
+generators/*.json
+generators/*.hdf5
 gt/*/
 gt/*.csv
 gt/*.sh
