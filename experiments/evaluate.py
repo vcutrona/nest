@@ -3,16 +3,15 @@ import os
 
 import pandas as pd
 
-from generators import Generator
+from generators import Generator, SimpleGenerator, ContextGenerator
 from gt import GTEnum
 
 
 class Evaluator:
-
     def __init__(self, generator: Generator):
         self._generator = generator
 
-    def _get_candidates(self, labels, contexts):
+    def _get_candidates_df(self, labels, contexts):
         raise NotImplementedError
 
     def _compute(self, gt):
@@ -22,16 +21,15 @@ class Evaluator:
                                 '%s_%s_candidates.csv' % (self._generator.__class__.__name__, gt.name))
 
         if os.path.isfile(filename) and isinstance(gt, GTEnum):  # already processed file -> return results (skip tests)
-            print('Got results from %s' % filename)
+            print('Getting results from %s' % filename)
             return pd.read_csv(filename,
                                dtype={'table': str, 'col_id': int, 'row_id': int, 'label': str,
                                       'context': str, 'entities': str},
                                keep_default_na=False)
 
         dataset = gt.get_df()
-        results = self._get_candidates(dataset['label'].values.tolist(), dataset['context'].values.tolist())
-        results = {label: " ".join(candidates) for label, candidates in results.items()}
-        dataset['candidates'] = dataset['label'].map(results)  # TODO: it works only for simple generators!
+        candidates_df = self._get_candidates_df(dataset['label'].values.tolist(), dataset['context'].values.tolist())
+        dataset = dataset.merge(candidates_df, how="left")
         if isinstance(gt, GTEnum):
             dataset.to_csv(filename, quoting=csv.QUOTE_ALL, index=False)
         return dataset
@@ -71,11 +69,20 @@ class Evaluator:
 
 
 class SimpleEvaluator(Evaluator):
-    def _get_candidates(self, labels, _):
-        return self._generator.multi_search(labels)
+    def __init__(self, generator: SimpleGenerator):
+        super().__init__(generator)
+
+    def _get_candidates_df(self, labels, _):
+        return pd.DataFrame([(label, " ".join(candidates))
+                             for label, candidates in self._generator.multi_search(labels).items()],
+                            columns=["label", "candidates"])
 
 
 class ContextEvaluator(Evaluator):
-    def _get_candidates(self, labels, contexts):
-        return self._generator.multi_search(labels, contexts)
+    def __init__(self, generator: ContextGenerator):
+        super().__init__(generator)
 
+    def _get_candidates_df(self, labels, contexts):
+        return pd.DataFrame([((*lc_pair), " ".join(candidates))
+                             for lc_pair, candidates in self._generator.multi_search(labels, contexts).items()],
+                            columns=["label", "context", "candidates"])
