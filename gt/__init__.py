@@ -5,10 +5,10 @@ import pandas as pd
 
 
 class GTEnum(Enum):
-    CEA_ROUND1 = 'CEA_Round1.csv'
-    CEA_ROUND2 = 'CEA_Round2.csv'
-    CEA_ROUND3 = 'CEA_Round3.csv'
-    CEA_ROUND4 = 'CEA_Round4.csv'
+    CEA_Round1 = 'CEA_Round1.csv'
+    CEA_Round2 = 'CEA_Round2.csv'
+    CEA_Round3 = 'CEA_Round3.csv'
+    CEA_Round4 = 'CEA_Round4.csv'
 
     def get_df(self):
         return pd.read_csv(os.path.join(os.path.dirname(__file__), self.value),
@@ -19,7 +19,7 @@ class GTEnum(Enum):
     @classmethod
     def get_test_gt(cls, size, from_gt=None, random=False):
         if from_gt is None:
-            from_gt = cls.CEA_ROUND1
+            from_gt = cls.CEA_Round1
         if random:
             df = from_gt.get_df().sample(size)
         else:

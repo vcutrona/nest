@@ -12,6 +12,6 @@ evaluators = [
 ]
 
 for evaluator in evaluators:
-    # print(evaluator.score(GTEnum.get_test_gt(size=100, from_gt=GTEnum.CEA_ROUND1, random=False)))
+    # print(evaluator.score(GTEnum.get_test_gt(size=100, from_gt=GTEnum.CEA_Round1, random=False)))
     print(evaluator.score_all())
 
