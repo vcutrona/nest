@@ -119,11 +119,13 @@ class Evaluator:
         for gt in gts:
             candidate_df = self._compute(gt)
             candidate_df['candidates'] = candidate_df.candidates.str.split(" ", expand=True)[0]  # take the first candidate
-            results[gt.name] = self._get_scores(
-                candidate_df[['table', 'col_id', 'row_id', 'entities']].rename(columns={"entities": "entity",
-                                                                                        'table': "tab_id"}),
-                candidate_df[['table', 'col_id', 'row_id', 'candidates']].rename(columns={"candidates": "entity",
-                                                                                          'table': "tab_id"}))
+            gt_df = candidate_df[['table', 'col_id', 'row_id', 'entities']].rename(columns={"entities": "entity",
+                                                                                        'table': "tab_id"})
+            ann_df = candidate_df[['table', 'col_id', 'row_id', 'candidates']].rename(columns={"candidates": "entity",
+                                                                                          'table': "tab_id"})
+            ann_df = ann_df[ann_df['entity'].astype(bool)]
+
+            results[gt.name] = self._get_scores(gt_df, ann_df)
 
         return {self._generator.__class__.__name__: results}
 
