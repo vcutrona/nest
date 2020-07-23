@@ -18,8 +18,11 @@ class AbstractHelper:
 
     def _get_es_docs_by_ids(self, docs_ids):
         elastic = Elasticsearch(self._config['es_host'])
-        s = Search(using=elastic, index=self._config['index']).query(Q('ids', values=docs_ids))[0:len(docs_ids)]
-        return [(hit.meta.id, hit.to_dict()) for hit in s.execute()]
+        hits = []
+        for i in range(0, len(docs_ids), 10000):  # max result window size
+            s = Search(using=elastic, index=self._config['index']).query(Q('ids', values=docs_ids[i:i + 10000]))
+            hits = hits + [(hit.meta.id, hit.to_dict()) for hit in s.execute()]
+        return hits
 
     def _get_abstracts_by_ids(self, docs_ids):
         return {doc_id: doc['description'] for doc_id, doc in self._get_es_docs_by_ids(docs_ids)}

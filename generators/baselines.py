@@ -8,7 +8,7 @@ from generators import SimpleGenerator, ContextGenerator
 
 
 class ESLookup(SimpleGenerator):
-    def __init__(self, config='ES', threads=mp.cpu_count(), chunk_size=10000):
+    def __init__(self, config='ES', threads=mp.cpu_count(), chunk_size=5000):
         super().__init__(config, threads, chunk_size)
         if 'size' not in self._config.keys():
             self._config['size'] = '10'  # it is the default value set by ES

@@ -58,7 +58,7 @@ class Evaluator:
             print('Getting results from %s' % filename)
             return pd.read_csv(filename,
                                dtype={'table': str, 'col_id': int, 'row_id': int, 'label': str,
-                                      'context': str, 'entities': str},
+                                      'context': str, 'entities': str, 'candidates': str},
                                keep_default_na=False)
 
         dataset = gt.get_df()
@@ -114,18 +114,35 @@ class Evaluator:
             'f1': f1
         }
 
+    @staticmethod
+    def _is_table_in_cat(x, include, exclude):
+        b = True
+        for i in include:
+            if not (b and (i in x)):
+                return False
+        for e in exclude:
+            if not (b and (e not in x)):
+                return False
+        return True
+
     def _score(self, gts):
         results = {}
         for gt in gts:
             candidate_df = self._compute(gt)
-            candidate_df['candidates'] = candidate_df.candidates.str.split(" ", expand=True)[0]  # take the first candidate
+            candidate_df['candidates'] = candidate_df.candidates.str.split(" ", expand=True)[0]  # take first candidate
             gt_df = candidate_df[['table', 'col_id', 'row_id', 'entities']].rename(columns={"entities": "entity",
-                                                                                        'table': "tab_id"})
+                                                                                            'table': "tab_id"})
             ann_df = candidate_df[['table', 'col_id', 'row_id', 'candidates']].rename(columns={"candidates": "entity",
-                                                                                          'table': "tab_id"})
+                                                                                               'table': "tab_id"})
             ann_df = ann_df[ann_df['entity'].astype(bool)]
 
-            results[gt.name] = self._get_scores(gt_df, ann_df)
+            tables_categories = gt.get_table_categories()
+            results[gt.name] = {}
+            for cat in tables_categories:
+                include, exclude = tables_categories[cat]
+                results[gt.name][cat] = self._get_scores(
+                    gt_df[gt_df['tab_id'].apply(lambda x: self._is_table_in_cat(x, include, exclude))],
+                    ann_df[ann_df['tab_id'].apply(lambda x: self._is_table_in_cat(x, include, exclude))])
 
         return {self._generator.__class__.__name__: results}
 

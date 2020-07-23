@@ -10,7 +10,7 @@ from generators.baselines import ESLookup
 
 class FastElmo(EmbeddingContextGenerator):
     def __init__(self, config='FastElmo', lookup=ESLookup()):
-        super().__init__(config, 1, 0, lookup)  # force single-process execution
+        super().__init__(config, 1, 10000, lookup)  # force single-process execution
         self._model = ElmoEmbedder(cuda_device=0,
                                    weight_file=os.path.join(os.path.dirname(__file__),
                                                             'elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5'),
@@ -32,9 +32,11 @@ class FastElmo(EmbeddingContextGenerator):
                      "mean" gets the embedding of the three elmo layers for each token
         :return:
         """
-        model_outputs = self._model.embed_sentences([sentence.split() for sentence in sentences])
-        embeds = []
+        # model_outputs = []
+        # for i in range(0, len(sentences), 10000):  # avoid CUDA going out of memory
+        model_outputs = self._model.embed_sentences([sentence.split() for sentence in sentences], batch_size=16)
 
+        embeds = []
         if mode == "layer_2":
             embeds = [model_output[2] for model_output in model_outputs]
 
@@ -54,7 +56,7 @@ class FastElmo(EmbeddingContextGenerator):
 
 class FastTransformers(EmbeddingContextGenerator):
     def __init__(self, config='FastTransformer'):
-        super().__init__(config, 1, 0, ESLookup())  # force single-process execution
+        super().__init__(config, 1, 10000, ESLookup())  # force single-process execution
         self._model = SentenceTransformer(self._config['model'])
 
         d = dict(self._config)

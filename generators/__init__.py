@@ -158,6 +158,9 @@ class ContextGenerator(Generator):
                                        [])
         else:
             results = self._multi_search(lc_pairs)
+            # results = functools.reduce(operator.iconcat,
+            #                            list(map(self._multi_search, list(self._chunk_it(lc_pairs)))),
+            #                            [])
 
         return dict(results)
 
@@ -200,11 +203,11 @@ class EmbeddingContextGenerator(ContextGenerator):
 
         new_entries = []
         for label, context in to_compute:
-            if context and contexts_embs[context].size:  # no context -> nothing to compare with -> return basic lookup
+            if context and contexts_embs[context].size:  # no context -> nothing to compare -> return basic lookup
                 scored_candidates = []
                 for candidate in lookup_results[label]:
                     scored_candidate = (candidate, 2)  # TODO is this a good initialization?
-                    if abstracts[candidate] and abstracts_embs[candidate].size:
+                    if candidate in abstracts and abstracts_embs[candidate].size:
                         scored_candidate = (candidate, cosine(abstracts_embs[candidate], contexts_embs[context]))
                     scored_candidates.append(scored_candidate)
                 scored_candidates = [candidate for candidate, score in

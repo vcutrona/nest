@@ -1,21 +1,28 @@
+import json
+
 from experiments.evaluate import SimpleEvaluator, ContextEvaluator
 from generators.baselines import ESLookup, WikipediaSearch, DBLookup
 from generators.ours import FastElmo, FastTransformers
-# from gt import GTEnum
 
-evaluators = [
-    SimpleEvaluator(WikipediaSearch()),
-    SimpleEvaluator(ESLookup(threads=6)),
-    SimpleEvaluator(DBLookup()),
-    ContextEvaluator(FastElmo()),
-    ContextEvaluator(FastTransformers())
-]
+simple_models = {
+    WikipediaSearch: {},
+    ESLookup: {'threads': 6},
+    DBLookup: {}
+}
+
+ctx_models = {
+    FastTransformers: {},
+    FastElmo: {}
+}
 
 res = []
-for evaluator in evaluators:
-    # print(evaluator.score(GTEnum.get_test_gt(size=100, from_gt=GTEnum.CEA_Round1, random=False)))
+for model, args in simple_models.items():
+    evaluator = SimpleEvaluator(model(**args))
     res.append(evaluator.score_all())
 
-with open('experiments_results.json', 'w', encoding='utf-8') as f:
-    json.dump(res, f, ensure_ascii=False, indent=4)
+for modelCls, args in ctx_models.items():
+    evaluator = ContextEvaluator(modelCls(**args))
+    res.append(evaluator.score_all())
 
+with open('experiments_results3.json', 'w', encoding='utf-8') as f:
+    json.dump(res, f, ensure_ascii=False, indent=4)
