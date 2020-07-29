@@ -1,39 +1,33 @@
 import os
 
-import numpy
+import numpy as np
 from allennlp.commands.elmo import ElmoEmbedder
 from sentence_transformers import SentenceTransformer
 
-from generators import EmbeddingContextGenerator
-from generators.baselines import ESLookup
+from generators import EmbeddingCandidateGenerator
+from lookup import LookupService
 
 
-class FastElmo(EmbeddingContextGenerator):
-    def __init__(self, config='FastElmo', lookup=ESLookup()):
-        super().__init__(config, 1, 10000, lookup)  # force single-process execution
+class FastElmo(EmbeddingCandidateGenerator):
+    """
+    Baseline method to re-rank candidates accordingly with vector similarities, based on the ELMO embeddings.
+    """
+    def __init__(self, lookup_service: LookupService, config='FastElmo'):
+        super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
         self._model = ElmoEmbedder(cuda_device=0,
                                    weight_file=os.path.join(os.path.dirname(__file__),
                                                             'elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5'),
                                    options_file=os.path.join(os.path.dirname(__file__),
                                                              'elmo_2x4096_512_2048cnn_2xhighway_options.json'))
-        d = dict(self._config)
-        self._cache_key_suffix = "%s_%s" % (self.__class__.__name__,
-                                            "|".join(sorted(["%s:%s" % (k, d[k])
-                                                             for k in d if k in ['abstract', 'abstract_max_tokens']])))
-
-    def _get_cache_key(self, label, context):
-        return label, context, self._cache_key_suffix
 
     def _get_embeddings_from_sentences(self, sentences, mode="layer_2"):
         """
         Generates the sentence embeddings from ELMO for each sentence in a list of strings.
-        :param sentences: the sentences you want to embed
+        :param sentences: the sentences to embed
         :param mode: from which layer of ELMO you want the embedding.
                      "mean" gets the embedding of the three elmo layers for each token
-        :return:
+        :return: a list of embeddings
         """
-        # model_outputs = []
-        # for i in range(0, len(sentences), 10000):  # avoid CUDA going out of memory
         model_outputs = self._model.embed_sentences([sentence.split() for sentence in sentences], batch_size=16)
 
         embeds = []
@@ -49,26 +43,29 @@ class FastElmo(EmbeddingContextGenerator):
         if mode == "mean":
             embeds = [(model_output[0] + model_output[1] + model_output[2]) / 3 for model_output in model_outputs]
 
-        embeds = [numpy.mean(embed, axis=0) if embed.size else embed for embed in embeds]
+        embeds = [np.mean(embed, axis=0) if embed.size else embed for embed in embeds]
 
         return embeds
 
 
-class FastTransformers(EmbeddingContextGenerator):
-    def __init__(self, config='FastTransformer'):
-        super().__init__(config, 1, 10000, ESLookup())  # force single-process execution
+class FastTransformer(EmbeddingCandidateGenerator):
+    """
+    Baseline method to re-rank candidates accordingly with vector similarities, based on the BERT embeddings.
+    """
+    def __init__(self, lookup_service: LookupService, config='FastTransformer'):
+        super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
+
+        required_options = ['model']
+        assert all(opt in self._config.keys() for opt in required_options)
+
         self._model = SentenceTransformer(self._config['model'])
 
-        d = dict(self._config)
-        self._cache_key_suffix = "%s_%s" % (self.__class__.__name__,
-                                            "|".join(sorted(["%s:%s" % (k, d[k])
-                                                             for k in d if k in ['model', 'abstract',
-                                                                                 'abstract_max_tokens']])))
-
-    def _get_cache_key(self, label, context):
-        return label, context, self._cache_key_suffix
-
     def _get_embeddings_from_sentences(self, sentences):
+        """
+        Generates the sentence embeddings from BERT for each sentence in a list of strings.
+        :param sentences: the sentences to embed
+        :return: a list of embeddings
+        """
         return self._model.encode(sentences)
 
 # fe = FastElmo()
