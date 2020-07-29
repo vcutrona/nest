@@ -1,10 +1,10 @@
 import os
 from abc import ABC
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
 from diskcache import Cache
 
-from data_model.config import ESLookupConfig, DBLookupConfig, WikipediaSearchConfig
+from data_model.config import LookupServiceConfig
 from data_model.lookup import LookupResult
 from utils.functions import strings_subsequences
 
@@ -14,7 +14,7 @@ class LookupService(ABC):
     Abstract model for a lookup service.
     """
 
-    def __init__(self, config: Union[ESLookupConfig, WikipediaSearchConfig, DBLookupConfig]):
+    def __init__(self, config: LookupServiceConfig):
         self._config = config
         self._cache = Cache(os.path.join(
             os.path.dirname(__file__),

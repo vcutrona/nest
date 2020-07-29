@@ -3,7 +3,17 @@ from typing import Optional
 
 
 @dataclass
-class ESLookupConfig:
+class LookupServiceConfig:
+    @property
+    def enable_cache(self):
+        return self.enable_cache
+
+    def cache_dir(self):
+        raise NotImplementedError
+
+
+@dataclass
+class ESLookupConfig(LookupServiceConfig):
     host: str
     index: str
     size: int = 10
