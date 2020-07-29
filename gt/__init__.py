@@ -12,7 +12,7 @@ class GTEnum(Enum):
     CEA_Round2 = 'CEA_Round2.csv'
     CEA_Round3 = 'CEA_Round3.csv'
     CEA_Round4 = 'CEA_Round4.csv'
-    TT = 'TT.csv'
+    CEA_TT = 'CEA_TT.csv'
 
     def get_df(self):
         """
@@ -31,7 +31,7 @@ class GTEnum(Enum):
         filter the rows relevant to the category.
         :return: a dictionary Dict(category, Tuple(to_include, to_exclude))
         """
-        if self == self.TT:
+        if self == self.CEA_TT:
             return {
                 'ALL': ([], []),
                 'CTRL_WIKI': (['WIKI'], ['NOISE2']),
