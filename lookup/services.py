@@ -2,8 +2,7 @@ import requests
 from elasticsearch import Elasticsearch, TransportError
 from elasticsearch_dsl import Q, Search
 
-from data_model.config import ESLookupConfig, WikipediaSearchConfig, DBLookupConfig
-from data_model.lookup import LookupResult
+from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig
 from lookup import LookupService
 
 

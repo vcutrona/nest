@@ -4,8 +4,7 @@ from typing import List, Tuple
 
 from diskcache import Cache
 
-from data_model.config import LookupServiceConfig
-from data_model.lookup import LookupResult
+from data_model.lookup import LookupResult, LookupServiceConfig
 from utils.functions import strings_subsequences
 
 
