@@ -1,10 +1,10 @@
 import os
 from abc import ABC
-from configparser import ConfigParser
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 from diskcache import Cache
 
+from data_model.config import ESLookupConfig, DBLookupConfig, WikipediaSearchConfig
 from data_model.lookup import LookupResult
 from utils.functions import strings_subsequences
 
@@ -14,22 +14,13 @@ class LookupService(ABC):
     Abstract model for a lookup service.
     """
 
-    def __init__(self, config: str):
-        # Service config
-        cfg = ConfigParser()
-        cfg.read(os.path.join(os.path.dirname(__file__), 'config.ini'))
-        self._config = cfg[config]
-
-        required_options = ['cache']
-        assert all(opt in self._config.keys() for opt in required_options)
-
-        # Diskcache
+    def __init__(self, config: Union[ESLookupConfig, WikipediaSearchConfig, DBLookupConfig]):
+        self._config = config
         self._cache = Cache(os.path.join(
             os.path.dirname(__file__),
             '.cache',
             self.__class__.__name__,
-            "|".join(["%s:%s" % i for i in filter(lambda x: x[0] not in ['host', 'url', 'cache'],
-                                                  self._config.items())])))
+            self._config.cache_dir()))
 
     def _update_cache(self, results: List[LookupResult]):
         """
@@ -76,7 +67,7 @@ class LookupService(ABC):
         """
         cached_entries, to_compute = [], labels
 
-        if self._config.getboolean('cache'):
+        if self._config.enable_cache:
             cached_entries, to_compute = self._get_cached_entries(to_compute)
 
         new_results = self._lookup(to_compute)

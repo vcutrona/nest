@@ -2,6 +2,7 @@ import requests
 from elasticsearch import Elasticsearch, TransportError
 from elasticsearch_dsl import Q, Search
 
+from data_model.config import ESLookupConfig, WikipediaSearchConfig, DBLookupConfig
 from data_model.lookup import LookupResult
 from lookup import LookupService
 
@@ -11,16 +12,10 @@ class ESLookup(LookupService):
     Lookup service for ElasticSearch indexes.
     """
 
-    def __init__(self, config='ES'):
+    def __init__(self, config: ESLookupConfig = ESLookupConfig('localhost', 'dbpedia')):
         super().__init__(config)
 
-        required_options = ['host', 'index', 'size', 'fuzziness', 'prefix_length', 'max_expansions']
-        assert all(opt in self._config.keys() for opt in required_options)
-
-        if not self._config['size']:
-            self._config['size'] = '10'  # it is the default value set by ES
-
-        assert Elasticsearch(self._config['host']).ping()  # check if the server is up and running
+        assert Elasticsearch(self._config.host).ping()  # check if the server is up and running
 
     def _get_es_docs(self, labels):
         """
@@ -29,21 +24,17 @@ class ESLookup(LookupService):
         :return: a generator of tuples <label, list[results]>
         """
         # CRITICAL: DO NOT set the ES client instance as a class member: it is not picklable! -> no parallel execution
-        elastic = Elasticsearch(self._config['host'])
-        config_keys = self._config.keys()
+        elastic = Elasticsearch(self._config.host)
         for label in labels:
-            s = Search(using=elastic, index=self._config['index'])
+            s = Search(using=elastic, index=self._config.index)
             q = {'value': label.lower()}
 
-            if config_keys['fuzziness']:
-                if self._config['fuzziness'] != 'AUTO':
-                    q['fuzziness'] = self._config.getint('fuzziness')
-                else:
-                    q['fuzziness'] = self._config['fuzziness']
-            if config_keys['prefix_length']:
-                q['prefix_length'] = self._config.getint('prefix_length')
-            if config_keys['max_expansions']:
-                q['max_expansions'] = self._config.getint('max_expansions')
+            if self._config.fuzziness:
+                q['fuzziness'] = self._config.fuzziness
+            if self._config.prefix_length:
+                q['prefix_length'] = self._config.prefix_length
+            if self._config.max_expansions:
+                q['max_expansions'] = self._config.max_expansions
 
             s.query = Q('bool',
                         must=[Q('multi_match', query=label.lower(), fields=['surface_form_keyword'], boost=5),
@@ -51,7 +42,7 @@ class ESLookup(LookupService):
                               ],
                         should=[Q('match', description=label.lower())])
 
-            s = s[0:self._config.getint('size')]
+            s = s[0:self._config.size]
 
             try:
                 yield label, [hit for hit in s.execute()]
@@ -73,12 +64,8 @@ class WikipediaSearch(LookupService):
     WikipediaSearch lookup service.
     """
 
-    def __init__(self, config='WikipediaSearch'):
+    def __init__(self, config: WikipediaSearchConfig = WikipediaSearchConfig('https://en.wikipedia.org/w/api.php')):
         super().__init__(config)
-
-        required_options = ['url']
-        assert all(opt in self._config.keys() for opt in required_options)
-
         self._session = requests.Session()
 
     def _get_wiki_docs(self, labels):
@@ -91,9 +78,11 @@ class WikipediaSearch(LookupService):
             params = {
                 "action": "opensearch",
                 "search": label,
-                "format": "json"
+                "format": "json",
+                "limit": self._config.limit,
+                "profile": self._config.profile
             }
-            yield label, self._session.get(url=self._config['url'], params=params).json()
+            yield label, self._session.get(url=self._config.url, params=params).json()
 
     def _lookup(self, labels) -> [LookupResult]:
         """
@@ -112,12 +101,8 @@ class DBLookup(LookupService):
     DBpediaLookup lookup service.
     """
 
-    def __init__(self, config='DBLookup'):
+    def __init__(self, config: DBLookupConfig = DBLookupConfig('http://lookup.dbpedia.org/api/search/KeywordSearch')):
         super().__init__(config)
-
-        required_options = ['url']
-        assert all(opt in self._config.keys() for opt in required_options)
-
         self._session = requests.Session()
         self._session.headers.update({'Accept': 'application/json'})
 
@@ -129,9 +114,10 @@ class DBLookup(LookupService):
         """
         for label in labels:
             params = {
-                "QueryString": label
+                "QueryString": label,
+                "MaxHits": self._config.max_hits
             }
-            yield label, self._session.get(url=self._config['url'], params=params).json()
+            yield label, self._session.get(url=self._config.url, params=params).json()
 
     def _lookup(self, labels) -> [LookupResult]:
         """
