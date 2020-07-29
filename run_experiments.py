@@ -1,8 +1,9 @@
 import json
 
+from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig
 from experiments.evaluation import Evaluator
 from generators.baselines import LookupGenerator
-from generators.ours import FastElmo, FastTransformer
+from generators.ours import FastBert
 from lookup.services import WikipediaSearch, ESLookup, DBLookup
 
 res = []
@@ -19,7 +20,7 @@ generators = {
             'lookup': (ESLookup, {}),
             'args': {
                 'threads': 6,
-                'config': 'BaseSingle'
+                'config': CandidateGeneratorConfig(max_subseq_len=None)
             }
         },
         {
@@ -34,7 +35,7 @@ generators = {
             'args': {
                 'threads': 2,
                 'chunk_size': 1000,
-                'config': 'BaseSingle'
+                'config': CandidateGeneratorConfig(max_subseq_len=None)
             }
         },
         {
@@ -49,18 +50,20 @@ generators = {
             'args': {
                 'threads': 3,
                 'chunk_size': 1000,
-                'config': 'BaseSingle'
+                'config': CandidateGeneratorConfig(max_subseq_len=None)
             }
         }
     ],
-    FastElmo: [
+    FastBert: [
         {
             'lookup': (ESLookup, {}),
             'args': {}
         },
         {
             'lookup': (ESLookup, {}),
-            'args': {'config': 'FastElmoSingle'}
+            'args': {'config': EmbeddingCandidateGeneratorConfig(max_subseq_len=None,
+                                                                 abstract='short',
+                                                                 abstract_max_tokens=512)}
         },
         {
             'lookup': (DBLookup, {}),
@@ -68,7 +71,9 @@ generators = {
         },
         {
             'lookup': (DBLookup, {}),
-            'args': {'config': 'FastElmoSingle'}
+            'args': {'config': EmbeddingCandidateGeneratorConfig(max_subseq_len=None,
+                                                                 abstract='short',
+                                                                 abstract_max_tokens=512)}
         },
         {
             'lookup': (WikipediaSearch, {}),
@@ -76,33 +81,9 @@ generators = {
         },
         {
             'lookup': (WikipediaSearch, {}),
-            'args': {'config': 'FastElmoSingle'}
-        },
-    ],
-    FastTransformer: [
-        {
-            'lookup': (ESLookup, {}),
-            'args': {}
-        },
-        {
-            'lookup': (ESLookup, {}),
-            'args': {'config': 'FastTransformerSingle'}
-        },
-        {
-            'lookup': (DBLookup, {}),
-            'args': {}
-        },
-        {
-            'lookup': (DBLookup, {}),
-            'args': {'config': 'FastTransformerSingle'}
-        },
-        {
-            'lookup': (WikipediaSearch, {}),
-            'args': {}
-        },
-        {
-            'lookup': (WikipediaSearch, {}),
-            'args': {'config': 'FastTransformerSingle'}
+            'args': {'config': EmbeddingCandidateGeneratorConfig(max_subseq_len=None,
+                                                                 abstract='short',
+                                                                 abstract_max_tokens=512)}
         }
     ]
 }

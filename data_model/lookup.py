@@ -34,8 +34,8 @@ class ESLookupConfig(LookupServiceConfig):
     enable_cache: bool = True
 
     def cache_dir(self):
-        return "index:%s|size:%d|fuzziness:%d|prefix_length:%d|max_expansions:%d" % \
-               (self.index, self.size, self.fuzziness, self.prefix_length, self.max_expansions)
+        return "index:%s|size:%d|fuzziness:%s|prefix_length:%s|max_expansions:%s" % \
+               (self.index, self.size, str(self.fuzziness), str(self.prefix_length), str(self.max_expansions))
 
 
 @dataclass

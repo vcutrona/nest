@@ -1,13 +1,12 @@
 import functools
 import operator
-import os
-from configparser import ConfigParser
 from typing import List
 
 from tqdm.contrib.concurrent import process_map
 
+from data_model.generator import CandidateEmbeddings, GeneratorResult, CandidateGeneratorConfig, \
+    EmbeddingCandidateGeneratorConfig
 from data_model.lookup import SearchKey
-from data_model.generator import CandidateEmbeddings, GeneratorResult
 from generators.utils import AbstractCollector
 from lookup import LookupService
 from utils.functions import chunk_list, weighting_by_ranking
@@ -18,23 +17,17 @@ class CandidateGenerator:
     Abstract Candidate Generator.
     """
 
-    def __init__(self, lookup_service: LookupService, config, threads, chunk_size):
+    def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig, threads, chunk_size):
         assert threads > 0
         self._threads = threads
         self._chunk_size = chunk_size
 
-        cfg = ConfigParser()
-        cfg.read(os.path.join(os.path.dirname(__file__), 'config.ini'))
-        self._config = cfg[config]
-
-        required_options = ['max_subseq_len']
-        assert all(opt in self._config.keys() for opt in required_options)
-
+        self._config = config
         self._lookup_service = lookup_service
 
     @property
     def id(self):
-        return self.__class__.__name__, self._lookup_service.__class__.__name__, self._config.name
+        return self.__class__.__name__, self._lookup_service.__class__.__name__, self._config.config_str()
 
     def _lookup_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
@@ -43,9 +36,9 @@ class CandidateGenerator:
         :return: a list of LookupResult
         """
         labels = [search_key.label for search_key in search_keys]
-        if self._config['max_subseq_len'] and self._config.getint('max_subseq_len') > 0:
+        if self._config.max_subseq_len and self._config.max_subseq_len > 0:
             lookup_results = dict(self._lookup_service.lookup_subsequences(labels,
-                                                                           self._config.getint('max_subseq_len')))
+                                                                           self._config.max_subseq_len))
         else:
             lookup_results = dict(self._lookup_service.lookup(labels))
         return [GeneratorResult(search_key, lookup_results[search_key.label]) for search_key in search_keys]
@@ -91,11 +84,8 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
     the cosine distance measure.
     """
 
-    def __init__(self, lookup_service: LookupService, config, threads, chunk_size):
+    def __init__(self, lookup_service: LookupService, config: EmbeddingCandidateGeneratorConfig, threads, chunk_size):
         super().__init__(lookup_service, config, threads, chunk_size)
-
-        required_options = ['abstract', 'abstract_max_tokens', 'default_score', 'alpha']
-        assert all(opt in self._config.keys() for opt in required_options)
 
         self._abstract_helper = AbstractCollector()
 
@@ -119,14 +109,14 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
         contexts = [search_key.context for search_key in lookup_results]
         contexts_embs = dict(zip(contexts, self._get_embeddings_from_sentences(contexts)))
 
-        if self._config['abstract'] == 'short':
+        if self._config.abstract == 'short':
             abstracts = self._abstract_helper.fetch_short_abstracts(
                 functools.reduce(operator.iconcat, lookup_results.values(), []),
-                int(self._config['abstract_max_tokens']))
+                int(self._config.abstract_max_tokens))
         else:
             abstracts = self._abstract_helper.fetch_long_abstracts(
                 functools.reduce(operator.iconcat, lookup_results.values(), []),
-                int(self._config['abstract_max_tokens']))
+                int(self._config.abstract_max_tokens))
         abstracts_embs = dict(zip(abstracts.keys(), self._get_embeddings_from_sentences(list(abstracts.values()))))
 
         results = []
@@ -141,13 +131,9 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
                     abstract_emb = abstracts_embs[candidate]
                 candidates_embeddings.append(CandidateEmbeddings(candidate, context_emb, abstract_emb))
 
-            params = {}
-            if 'default_score' in self._config.keys() and self._config['default_score']:
-                params['default_score'] = self._config.getfloat('default_score')
-            if 'alpha' in self._config.keys() and self._config['alpha']:
-                params['alpha'] = self._config.getfloat('alpha')
-
             results.append(GeneratorResult(
-                search_key, [c.candidate for c in weighting_by_ranking(candidates_embeddings, **params)]))
+                search_key, [c.candidate for c in weighting_by_ranking(candidates_embeddings,
+                                                                       self._config.alpha,
+                                                                       self._config.default_score)]))
 
         return results

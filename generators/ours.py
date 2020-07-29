@@ -4,6 +4,7 @@ import numpy as np
 from allennlp.commands.elmo import ElmoEmbedder
 from sentence_transformers import SentenceTransformer
 
+from data_model.generator import EmbeddingCandidateGeneratorConfig
 from generators import EmbeddingCandidateGenerator
 from lookup import LookupService
 
@@ -12,7 +13,11 @@ class FastElmo(EmbeddingCandidateGenerator):
     """
     Baseline method to re-rank candidates accordingly with vector similarities, based on the ELMO embeddings.
     """
-    def __init__(self, lookup_service: LookupService, config='FastElmo'):
+
+    def __init__(self, lookup_service: LookupService,
+                 config=EmbeddingCandidateGeneratorConfig(max_subseq_len=5,
+                                                          abstract='short',
+                                                          abstract_max_tokens=15)):
         super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
         self._model = ElmoEmbedder(cuda_device=0,
                                    weight_file=os.path.join(os.path.dirname(__file__),
@@ -48,17 +53,17 @@ class FastElmo(EmbeddingCandidateGenerator):
         return embeds
 
 
-class FastTransformer(EmbeddingCandidateGenerator):
+class FastBert(EmbeddingCandidateGenerator):
     """
     Baseline method to re-rank candidates accordingly with vector similarities, based on the BERT embeddings.
     """
-    def __init__(self, lookup_service: LookupService, config='FastTransformer'):
+
+    def __init__(self, lookup_service: LookupService,
+                 config=EmbeddingCandidateGeneratorConfig(max_subseq_len=5,
+                                                          abstract='short',
+                                                          abstract_max_tokens=512)):
         super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
-
-        required_options = ['model']
-        assert all(opt in self._config.keys() for opt in required_options)
-
-        self._model = SentenceTransformer(self._config['model'])
+        self._model = SentenceTransformer('bert-base-nli-mean-tokens')
 
     def _get_embeddings_from_sentences(self, sentences):
         """

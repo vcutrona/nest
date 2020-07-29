@@ -2,7 +2,7 @@ import multiprocessing as mp
 from typing import List
 
 from data_model.lookup import SearchKey
-from data_model.generator import GeneratorResult
+from data_model.generator import GeneratorResult, CandidateGeneratorConfig
 from generators import CandidateGenerator
 from lookup import LookupService
 
@@ -11,7 +11,8 @@ class LookupGenerator(CandidateGenerator):
     """
     A generator that just forwards lookup results.
     """
-    def __init__(self, lookup_service: LookupService, config='Base', threads=mp.cpu_count(), chunk_size=5000):
+    def __init__(self, lookup_service: LookupService, config=CandidateGeneratorConfig(5),
+                 threads=mp.cpu_count(), chunk_size=5000):
         super().__init__(lookup_service, config, threads, chunk_size)
 
     def _select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:

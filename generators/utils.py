@@ -1,22 +1,19 @@
-import os
-from configparser import ConfigParser
-
 from SPARQLWrapper import SPARQLWrapper, JSON
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
+
+from data_model.generator import AbstractCollectorConfig
 
 
 class AbstractCollector:
     """
     Helper class to retrieve abstracts for DBpedia entities.
     """
-    def __init__(self, config='AbstractHelper'):
-        cfg = ConfigParser()
-        cfg.read(os.path.join(os.path.dirname(__file__), 'config.ini'))
-        self._config = cfg[config]
-        assert Elasticsearch(self._config['es_host']).ping()
+    def __init__(self, config: AbstractCollectorConfig = AbstractCollectorConfig()):
+        self._config = config
+        assert Elasticsearch(self._config.es_host).ping()
 
-        self._sparql = SPARQLWrapper(self._config['sparql_endpoint'])
+        self._sparql = SPARQLWrapper(self._config.sparql_endpoint)
         self._sparql.setReturnFormat(JSON)
 
     def _get_es_docs_by_ids(self, docs_ids):
@@ -25,10 +22,10 @@ class AbstractCollector:
         :param docs_ids: ids of the documents to retrieve
         :return: a dictionary Dict(doc_id: document)
         """
-        elastic = Elasticsearch(self._config['es_host'])
+        elastic = Elasticsearch(self._config.es_host)
         hits = []
         for i in range(0, len(docs_ids), 10000):  # max result window size
-            s = Search(using=elastic, index=self._config['index']).query(Q('ids', values=docs_ids[i:i + 10000]))
+            s = Search(using=elastic, index=self._config.index).query(Q('ids', values=docs_ids[i:i + 10000]))
             hits = hits + [(hit.meta.id, hit.to_dict()) for hit in s.execute()]
         return hits
 
