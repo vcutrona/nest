@@ -9,6 +9,7 @@ class AbstractCollector:
     """
     Helper class to retrieve abstracts for DBpedia entities.
     """
+
     def __init__(self, config: AbstractCollectorConfig = AbstractCollectorConfig()):
         self._config = config
         assert Elasticsearch(self._config.es_host).ping()
@@ -47,25 +48,32 @@ class AbstractCollector:
         """
         return " ".join(abstract.split(" ")[:size]).strip()
 
-    def fetch_long_abstracts(self, uris, max_tokens=None):  # TODO - re-implement
+    def fetch_long_abstracts(self, uris, max_tokens=None):
         """
-        Retrieve long abstracts of DBpedia entities, from a SPARQL endpoint.
+        Retrieve long abstracts (dbo:abstract) of DBpedia entities, from a SPARQL endpoint.
         If more than one abstract is found, only the first will be returned.
         :param uris: list of URIs
         :param max_tokens: max length of the abstracts; if longer, they will be cut to fit the desired length.
                If None, the full abstract will be returned.
         :return: a dictionary Dict(uri, abstract)
         """
-        pass
-        # self._sparql.setQuery("""
-        #                         SELECT DISTINCT ?abstract
-        #                         WHERE {
-        #                             <%s> dbo:abstract ?abstract.
-        #                             FILTER (LANG(?abstract) = 'en' || LANG(?abstract) = '')
-        #                         }
-        #                     """ % uri)
-        # results = self._sparql.query().convert()
-        # return [result["abstract"]["value"] for result in results["results"]["bindings"]]
+
+        results = []
+
+        for i in range(0, len(uris), 25):
+            uris_list = " ".join(map(lambda x: "<%s>" % x, uris[i:i + 25]))
+            self._sparql.setQuery("""
+            SELECT distinct ?uri ?abstract {
+              VALUES ?uri { %s }
+              ?uri dbo:abstract ?abstract . 
+              FILTER langMatches( lang(?abstract), "EN" ) 
+            }
+            """ % uris_list)
+
+            results += [(result["uri"]["value"], self._cut_abstract(result["abstract"]["value"], max_tokens))
+                        for result in self._sparql.query().convert()["results"]["bindings"]]
+
+        return dict(results)
 
     def fetch_short_abstracts(self, uris, max_tokens=None):
         """
@@ -78,7 +86,6 @@ class AbstractCollector:
         """
         return {entity_uri: self._cut_abstract(entity_abstracts[0], max_tokens) if entity_abstracts else ''
                 for entity_uri, entity_abstracts in self._get_abstracts_by_ids(uris).items()}
-
 
 # class Scorer(Enum):
 #     DISTANCE = 0
