@@ -1,8 +1,8 @@
 import multiprocessing as mp
 from typing import List
 
-from data_model.lookup import SearchKey
 from data_model.generator import GeneratorResult, CandidateGeneratorConfig
+from data_model.lookup import SearchKey
 from generators import CandidateGenerator
 from lookup import LookupService
 

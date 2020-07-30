@@ -1,6 +1,6 @@
 import json
 
-from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig
+from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, FastBertConfig
 from experiments.evaluation import Evaluator
 from generators.baselines import LookupGenerator
 from generators.ours import FastBert
@@ -61,9 +61,9 @@ generators = {
         },
         {
             'lookup': (ESLookup, {}),
-            'args': {'config': EmbeddingCandidateGeneratorConfig(max_subseq_len=None,
-                                                                 abstract='short',
-                                                                 abstract_max_tokens=512)}
+            'args': {'config': FastBertConfig(max_subseq_len=None,
+                                              abstract='short',
+                                              abstract_max_tokens=512)}
         },
         {
             'lookup': (DBLookup, {}),
@@ -71,9 +71,9 @@ generators = {
         },
         {
             'lookup': (DBLookup, {}),
-            'args': {'config': EmbeddingCandidateGeneratorConfig(max_subseq_len=None,
-                                                                 abstract='short',
-                                                                 abstract_max_tokens=512)}
+            'args': {'config': FastBertConfig(max_subseq_len=None,
+                                              abstract='short',
+                                              abstract_max_tokens=512)}
         },
         {
             'lookup': (WikipediaSearch, {}),
@@ -81,9 +81,9 @@ generators = {
         },
         {
             'lookup': (WikipediaSearch, {}),
-            'args': {'config': EmbeddingCandidateGeneratorConfig(max_subseq_len=None,
-                                                                 abstract='short',
-                                                                 abstract_max_tokens=512)}
+            'args': {'config': FastBertConfig(max_subseq_len=None,
+                                              abstract='short',
+                                              abstract_max_tokens=512)}
         }
     ]
 }

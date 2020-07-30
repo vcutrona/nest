@@ -2,6 +2,7 @@ import functools
 import operator
 from typing import List
 
+import numpy as np
 from tqdm.contrib.concurrent import process_map
 
 from data_model.generator import CandidateEmbeddings, GeneratorResult, CandidateGeneratorConfig, \
@@ -89,10 +90,18 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
 
         self._abstract_helper = AbstractCollector()
 
-    def _get_embeddings_from_sentences(self, sentences):
+    def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[np.ndarray]:
         """
-        Abstract method to compute sentences embeddings.
-        :param sentences: the list of sentences to embed
+        Abstract method to compute search keys embeddings.
+        :param search_keys: the list of SearchKey to embed
+        :return: a list of embeddings
+        """
+        raise NotImplementedError
+
+    def _embed_abstracts(self, abstracts: List[str]) -> List[np.ndarray]:
+        """
+        Abstract method to compute abstracts embeddings.
+        :param abstracts: the list of abstracts to embed
         :return: a list of embeddings
         """
         raise NotImplementedError
@@ -105,9 +114,8 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
         """
         lookup_results = dict(self._lookup_candidates(search_keys))  # collect lookup result from the super class
 
-        # embed each context
-        contexts = [search_key.context for search_key in lookup_results]
-        contexts_embs = dict(zip(contexts, self._get_embeddings_from_sentences(contexts)))
+        # create embed for each label and context pair
+        search_keys_embs = dict(zip(search_keys, self._embed_search_keys(search_keys)))
 
         if self._config.abstract == 'short':
             abstracts = self._abstract_helper.fetch_short_abstracts(
@@ -117,14 +125,14 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
             abstracts = self._abstract_helper.fetch_long_abstracts(
                 functools.reduce(operator.iconcat, lookup_results.values(), []),
                 int(self._config.abstract_max_tokens))
-        abstracts_embs = dict(zip(abstracts.keys(), self._get_embeddings_from_sentences(list(abstracts.values()))))
+        abstracts_embs = dict(zip(abstracts.keys(), self._embed_abstracts(list(abstracts.values()))))
 
         results = []
         for search_key in search_keys:
             candidates_embeddings = []
             context_emb = None
-            if search_key.context and contexts_embs[search_key.context].size:
-                context_emb = contexts_embs[search_key.context]
+            if search_key.context and search_keys_embs[search_key].size:
+                context_emb = search_keys_embs[search_key]
             for candidate in lookup_results[search_key]:
                 abstract_emb = None
                 if candidate in abstracts and abstracts_embs[candidate].size:

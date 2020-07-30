@@ -22,8 +22,17 @@ class EmbeddingCandidateGeneratorConfig(CandidateGeneratorConfig):
     alpha: float = 0.5
 
     def config_str(self) -> str:
-        return "max_subseq_len:%s|abstract:%s|abstract_max_tokens:%d|default_score:%s|alpha:%.2f" % \
-               (str(self.max_subseq_len), self.abstract, self.abstract_max_tokens, str(self.default_score), self.alpha)
+        return "|".join([super().config_str(),
+                         "abstract:%s|abstract_max_tokens:%d|default_score:%s|alpha:%.2f"
+                         % (self.abstract, self.abstract_max_tokens, str(self.default_score), self.alpha)])
+
+
+@dataclass
+class FastBertConfig(EmbeddingCandidateGeneratorConfig):
+    strategy: str = 'context'
+
+    def config_str(self) -> str:
+        return "|".join([super().config_str(), "strategy:%s" % self.strategy])
 
 
 @dataclass

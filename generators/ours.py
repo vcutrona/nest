@@ -1,17 +1,19 @@
 import os
+from typing import List
 
 import numpy as np
 from allennlp.commands.elmo import ElmoEmbedder
 from sentence_transformers import SentenceTransformer
 
-from data_model.generator import EmbeddingCandidateGeneratorConfig
+from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig
+from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
 from lookup import LookupService
 
 
 class FastElmo(EmbeddingCandidateGenerator):
     """
-    Baseline method to re-rank candidates accordingly with vector similarities, based on the ELMO embeddings.
+    A method to re-rank candidates accordingly with vector similarities, based on the ELMO embeddings.
     """
 
     def __init__(self, lookup_service: LookupService,
@@ -25,10 +27,10 @@ class FastElmo(EmbeddingCandidateGenerator):
                                    options_file=os.path.join(os.path.dirname(__file__),
                                                              'elmo_2x4096_512_2048cnn_2xhighway_options.json'))
 
-    def _get_embeddings_from_sentences(self, sentences, mode="layer_2"):
+    def _embed_sentences(self, sentences: List[str], mode) -> List[np.ndarray]:
         """
-        Generates the sentence embeddings from ELMO for each sentence in a list of strings.
-        :param sentences: the sentences to embed
+        Generic method to generate sentence embeddings from ELMO.
+        :param sentences: the list of sentences to embed
         :param mode: from which layer of ELMO you want the embedding.
                      "mean" gets the embedding of the three elmo layers for each token
         :return: a list of embeddings
@@ -52,26 +54,62 @@ class FastElmo(EmbeddingCandidateGenerator):
 
         return embeds
 
+    def _embed_search_keys(self, search_keys: List[SearchKey], mode="layer_2") -> List[np.ndarray]:
+        """
+        Generates the sentence embeddings from ELMO for each search key in a list of SearchKey items.
+        :param search_keys: the list of SearchKey to embed
+        :param mode: from which layer of ELMO you want the embedding.
+                     "mean" gets the embedding of the three elmo layers for each token
+        :return: a list of embeddings
+        """
+        sentences = [" ".join([search_key.label, search_key.context]) for search_key in search_keys]
+        return self._embed_sentences(sentences, mode)
+
+    def _embed_abstracts(self, abstracts: List[str], mode='layer_2') -> List[np.ndarray]:
+        """
+        Generates the sentence embeddings from ELMO for each abstract in list.
+        :param abstracts: the list of abstracts to embed
+        :return: a list of embeddings
+        """
+        return self._embed_sentences(abstracts, mode)
+
 
 class FastBert(EmbeddingCandidateGenerator):
     """
-    Baseline method to re-rank candidates accordingly with vector similarities, based on the BERT embeddings.
+    A method to re-rank candidates accordingly with vector similarities, based on the BERT embeddings.
     """
 
     def __init__(self, lookup_service: LookupService,
-                 config=EmbeddingCandidateGeneratorConfig(max_subseq_len=5,
-                                                          abstract='short',
-                                                          abstract_max_tokens=512)):
+                 config: FastBertConfig = FastBertConfig(max_subseq_len=5, abstract='short', abstract_max_tokens=512)):
         super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
         self._model = SentenceTransformer('bert-base-nli-mean-tokens')
 
-    def _get_embeddings_from_sentences(self, sentences):
+    def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[np.ndarray]:
         """
-        Generates the sentence embeddings from BERT for each sentence in a list of strings.
-        :param sentences: the sentences to embed
+        Generates the sentence/contextual embeddings from BERT for each search key in a list of SearchKey items.
+        :param search_keys: the list of SearchKey to embed
         :return: a list of embeddings
         """
-        return self._model.encode(sentences)
+        sentences = [" ".join([search_key.label, search_key.context]) for search_key in search_keys]
+        if self._config.strategy == 'sentence':
+            return self._model.encode(sentences)
+        elif self._config.strategy == 'context':
+            token_embeddings_list = self._model.encode(sentences, output_value='token_embeddings')
+            contextual_embeddings = []
+            for search_key, token_embeddings in zip(search_keys, token_embeddings_list):
+                label_tokens = self._model.tokenize(search_key.label)
+                contextual_embeddings.append(np.mean(token_embeddings[1:len(label_tokens) + 1], axis=0))
+            return contextual_embeddings
+        else:
+            raise Exception
+
+    def _embed_abstracts(self, abstracts: List[str]) -> List[np.ndarray]:
+        """
+        Generates the sentence embeddings from BERT for each abstract in list.
+        :param abstracts: the list of abstracts to embed
+        :return: a list of embeddings
+        """
+        return self._model.encode(abstracts)
 
 # fe = FastElmo()
 # print(fe.search("Bobtail", "Cat Female 7 10 Red"))  # breed, species, sex, age, weight, colour
