@@ -25,7 +25,7 @@ class AbstractCollector:
         elastic = Elasticsearch(self._config.es_host)
         hits = []
         for i in range(0, len(docs_ids), 10000):  # max result window size
-            s = Search(using=elastic, index=self._config.index).query(Q('ids', values=docs_ids[i:i + 10000]))
+            s = Search(using=elastic, index=self._config.index).query(Q('ids', values=docs_ids[i:i + 10000]))[0:10000]
             hits = hits + [(hit.meta.id, hit.to_dict()) for hit in s.execute()]
         return hits
 
@@ -78,3 +78,10 @@ class AbstractCollector:
         """
         return {entity_uri: self._cut_abstract(entity_abstracts[0], max_tokens) if entity_abstracts else ''
                 for entity_uri, entity_abstracts in self._get_abstracts_by_ids(uris).items()}
+
+
+# class Scorer(Enum):
+#     DISTANCE = 0
+#     WEIGHTED_RANK = 1
+#
+#     def score(self, candidates):

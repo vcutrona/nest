@@ -77,7 +77,7 @@ def weighting_by_ranking(candidates: List[CandidateEmbeddings], alpha=0.5, defau
                                                          None))
 
     if not candidates or not scored_candidates:  # safe guard
-        return []
+        return non_scored_candidates  # empty or all candidates are non-scored candidates
 
     rank_scaler = MinMaxScaler()
     distance_scaler = MinMaxScaler()
