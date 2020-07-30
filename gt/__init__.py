@@ -59,7 +59,7 @@ class GTEnum(Enum):
         if from_gt is None:
             from_gt = cls.CEA_Round1
         if random:
-            df = from_gt.get_df().sample(size)
+            df = from_gt.get_df().sample(size).reset_index()
         else:
             df = from_gt.get_df()[:size]
         tmp = Enum('GTTestEnum', {'%s_TEST_%drows' % (from_gt.name, size): df})  # create a temp enum (name: df)

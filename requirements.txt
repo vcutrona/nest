@@ -8,6 +8,6 @@ scipy~=1.4.1
 requests~=2.23.0
 diskcache~=4.1.0
 tqdm~=4.45.0
-transformers=2.9.0
-sentence-transformers=0.3.2
+transformers==3.0.2
+sentence-transformers==0.3.2
 scikit-learn~=0.22.2.post1
