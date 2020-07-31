@@ -3,10 +3,11 @@ import operator
 from typing import List
 
 import numpy as np
+from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from data_model.generator import CandidateEmbeddings, GeneratorResult, CandidateGeneratorConfig, \
-    EmbeddingCandidateGeneratorConfig
+from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, \
+    CandidateEmbeddings, GeneratorResult
 from data_model.lookup import SearchKey
 from generators.utils import AbstractCollector
 from lookup import LookupService
@@ -64,8 +65,11 @@ class CandidateGenerator:
                                                    list(chunk_list(search_keys, self._chunk_size)),
                                                    max_workers=self._threads),
                                        [])
-        else:
-            results = self._select_candidates(search_keys)
+
+        else:  # avoid CUDA re-initialization in forked subprocess
+            results = []
+            for search_keys_chunk in tqdm(chunk_list(search_keys, self._chunk_size)):
+                results += self._select_candidates(search_keys_chunk)
 
         return results
 
