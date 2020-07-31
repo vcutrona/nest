@@ -1,3 +1,4 @@
+import numpy as np
 from skopt import dump, load
 from skopt import forest_minimize
 from skopt.space import Real, Integer, Categorical
@@ -5,7 +6,6 @@ from skopt.space import Real, Integer, Categorical
 from data_model.generator import FastBertConfig
 from experiments.evaluation import Evaluator
 from generators.ours import FastBert
-from gt import GTEnum
 from lookup.services import WikipediaSearch
 
 # [FastBertConfig space]
@@ -25,9 +25,12 @@ def ml_algorithm(suggestion):
         cfg = FastBertConfig(*suggestion[0:-1])
     print(cfg)
     evaluator = Evaluator(FastBert(WikipediaSearch(), cfg))
-    score_dict = evaluator.score(GTEnum.get_test_gt(50, from_gt=GTEnum.CEA_Round1, random=True))
-    metric = list(list(score_dict.values())[0].values())[0]['ALL']['f1']
-    print(metric)
+    score_dict = evaluator.score_all()
+    metrics = []
+    for key, value in list(score_dict.values())[0].items():
+        metrics.append(value['ALL']['f1'])
+    metric = np.median(metrics)
+    print(metric, metrics)
     return -metric
 
 
