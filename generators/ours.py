@@ -94,15 +94,20 @@ class FastBert(EmbeddingCandidateGenerator):
         sentences = [simplify_string(" ".join([search_key.label, search_key.context])) for search_key in search_keys]
         if self._config.strategy == 'sentence':
             return self._model.encode(sentences)
-        elif self._config.strategy == 'context':
+        else:
             token_embeddings_list = self._model.encode(sentences, output_value='token_embeddings')
             contextual_embeddings = []
-            for search_key, token_embeddings in zip(search_keys, token_embeddings_list):
-                label_tokens = self._model.tokenize(search_key.label)
-                contextual_embeddings.append(np.mean(token_embeddings[1:len(label_tokens) + 1], axis=0))
+            if self._config.strategy == 'context':
+                for search_key, token_embeddings in zip(search_keys, token_embeddings_list):
+                    label_tokens = self._model.tokenize(search_key.label)
+                    contextual_embeddings.append(np.mean(token_embeddings[1:len(label_tokens) + 1], axis=0))
+            elif self._config.strategy == 'cls':
+                for token_embeddings in token_embeddings_list:
+                    contextual_embeddings.append(token_embeddings[0])
+            else:
+                raise Exception
+
             return contextual_embeddings
-        else:
-            raise Exception
 
     def _embed_abstracts(self, abstracts: List[str]) -> List[np.ndarray]:
         """

@@ -14,7 +14,7 @@ space = [Categorical([0, 3, 4, 5], name="max_subseq_len"),
          Categorical([8, 16, 32, 64, 128, 256, 512], name="abstract_max_tokens"),
          Real(0.5, 2.0, name='default_score'),
          Real(0.0, 1.0, name='alpha'),
-         Categorical(['context', 'sentence'], name="strategy"),
+         Categorical(['context', 'sentence', 'cls'], name="strategy"),
          Integer(0, 1, name="dummy_default_score")]
 
 
