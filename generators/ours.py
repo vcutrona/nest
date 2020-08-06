@@ -9,6 +9,7 @@ from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConf
 from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
 from lookup import LookupService
+from utils.functions import simplify_string
 
 
 class FastElmo(EmbeddingCandidateGenerator):
@@ -90,7 +91,7 @@ class FastBert(EmbeddingCandidateGenerator):
         :param search_keys: the list of SearchKey to embed
         :return: a list of embeddings
         """
-        sentences = [" ".join([search_key.label, search_key.context]) for search_key in search_keys]
+        sentences = [simplify_string(" ".join([search_key.label, search_key.context])) for search_key in search_keys]
         if self._config.strategy == 'sentence':
             return self._model.encode(sentences)
         elif self._config.strategy == 'context':
@@ -109,7 +110,7 @@ class FastBert(EmbeddingCandidateGenerator):
         :param abstracts: the list of abstracts to embed
         :return: a list of embeddings
         """
-        return self._model.encode(abstracts)
+        return self._model.encode([simplify_string(abstract) for abstract in abstracts])
 
 # fe = FastElmo()
 # print(fe.search("Bobtail", "Cat Female 7 10 Red"))  # breed, species, sex, age, weight, colour

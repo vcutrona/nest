@@ -1,7 +1,10 @@
+import re
+import string
 from typing import List
 from typing import Tuple, Dict, Set
 
 import numpy as np
+from dateutil.parser import parse
 from scipy.spatial.distance import cosine
 from sklearn.preprocessing import MinMaxScaler
 
@@ -92,3 +95,67 @@ def weighting_by_ranking(candidates: List[CandidateEmbeddings], alpha=0.5, defau
                                        + (1 - alpha) * distance_scaler.transform([[s_cand.distance]])[0][0]),
         scored_candidates)
     return sorted(scored_candidates, key=lambda s_cand: s_cand.score) + non_scored_candidates
+
+
+def _remove_dates(input_str):
+    """
+    Remove dates from a string.
+    :param input_str: a string
+    :return:
+    """
+    s = re.sub(r'([a-zA-Z]+)([0-9]+)', r'\1 \2', input_str)  # split tokens like 2011-11-29November -> 2011-11-29 November
+    s = re.sub(r'([0-9]+)([a-zA-Z]+)', r'\1 \2 ', s)  # split tokens like November2011 -> November 2011
+
+    tokens = s.split()
+    f = []
+    for token in tokens:
+        try:
+            parse(token)
+        except:
+            try:
+                parse(re.sub(f"[{string.punctuation}]", '', token))  # try to remove also symbols (like ?3,600 -> 3600)
+            except:
+                f.append(token)
+
+    return " ".join(f)
+
+
+def _remove_single_char(input_str):
+    return " ".join(filter(lambda x: len(x) > 1, input_str.split()))
+
+
+def _remove_numbers(input_str):
+    return " ".join(filter(lambda x: not x.isnumeric(), input_str.split()))
+
+
+def _remove_brackets(input_str):
+    """
+    Remove brackets content (if it starts in the first 5 tokens).
+    E.g.:
+    - _remove_brackets("Barack Hussein Obama II (US /bəˈrɑːk huːˈseɪn oʊˈbɑːmə/; born August 4, 1961)")
+      > Barack Hussein Obama II
+    - _remove_brackets("Del Piero (pronunciation: [del ˈpjɛːro]) Ufficiale OMRI (born 9 November 1974)") ->
+      > Del Piero  Ufficiale OMRI (born 9 November 1974)
+    - _remove_brackets("Alessandro Del Piero Ufficiale OMRI (born 9 November 1974)")
+      > Alessandro Del Piero Ufficiale OMRI (born 9 November 1974)
+    :param input_str:
+    :return:
+    """
+    s = input_str
+    max_pos = len(" ".join(s.split()[:5]))
+    if '(' in s and ')' in s and s.index('(') < max_pos:
+        s = s[0:s.index('(')] + s[s.index(')') + 1:]
+    return s
+
+
+def simplify_string(input_str, dates=True, numbers=True, single_char=True, brackets=True):
+    s = input_str
+    if brackets:
+        s = _remove_brackets(s)
+    if dates:
+        s = _remove_dates(s)
+    if numbers:
+        s = _remove_numbers(s)
+    if single_char:
+        s = _remove_single_char(s)
+    return s
