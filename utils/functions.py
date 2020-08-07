@@ -121,31 +121,43 @@ def _remove_dates(input_str):
 
 
 def _remove_single_char(input_str):
-    return " ".join(filter(lambda x: len(x) > 1, input_str.split()))
+    return " ".join(filter(lambda x: len(x) > 1 or x == 'a', input_str.split()))
 
 
 def _remove_numbers(input_str):
-    return " ".join(filter(lambda x: not x.isnumeric(), input_str.split()))
+    return " ".join(filter(lambda x: not x.replace('.', '').replace(',', '').isdigit(), input_str.split()))
 
 
 def _remove_brackets(input_str):
     """
-    Remove brackets content (if it starts in the first 5 tokens).
+    Remove brackets content (if it starts in the first 5 tokens). If the text starts with a bracket,
+    the content is removed first, then the remaining part of string is processed.
     E.g.:
     - _remove_brackets("Barack Hussein Obama II (US /bəˈrɑːk huːˈseɪn oʊˈbɑːmə/; born August 4, 1961)")
       > Barack Hussein Obama II
-    - _remove_brackets("Del Piero (pronunciation: [del ˈpjɛːro]) Ufficiale OMRI (born 9 November 1974)") ->
-      > Del Piero  Ufficiale OMRI (born 9 November 1974)
     - _remove_brackets("Alessandro Del Piero Ufficiale OMRI (born 9 November 1974)")
       > Alessandro Del Piero Ufficiale OMRI (born 9 November 1974)
+    - _remove_brackets("(This article is about India (state).) Punjab (/pʌnˈdʒɑːb/) is a state in North India.")
+      > Punjab  is a state in North India.
     :param input_str:
     :return:
     """
-    s = input_str
-    max_pos = len(" ".join(s.split()[:5]))
-    if '(' in s and ')' in s and s.index('(') < max_pos:
-        s = s[0:s.index('(')] + s[s.index(')') + 1:]
-    return s
+
+    max_pos = len(" ".join(input_str.split()[:5]))  # check if the bracket occurs in the first 5 tokens
+    if '(' in input_str and ')' in input_str:
+        bracket_idx = input_str.index("(")  # get the bracket index
+    else:
+        return input_str
+
+    # Remove brackets until the index of the first bracket changes (if not, you're deleting nested brackets)
+    while bracket_idx < max_pos and '(' in input_str and ')' in input_str and bracket_idx == input_str.index("("):
+        input_str = re.subn(r'\([^()]*\)', '', input_str, count=1)[0].strip()
+
+    # Process the obtained string again if the string started with a bracket
+    if bracket_idx == 0:
+        return _remove_brackets(input_str)
+
+    return input_str
 
 
 def simplify_string(input_str, dates=True, numbers=True, single_char=True, brackets=True):
