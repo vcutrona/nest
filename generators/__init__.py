@@ -1,13 +1,14 @@
 import functools
 import operator
-from typing import List
+import os
+from typing import List, Tuple, Union
 
-import numpy as np
+from diskcache import Cache
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, \
-    CandidateEmbeddings, GeneratorResult
+    CandidateEmbeddings, GeneratorResult, Embedding
 from data_model.lookup import SearchKey
 from generators.utils import AbstractCollector
 from lookup import LookupService
@@ -93,8 +94,13 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
         super().__init__(lookup_service, config, threads, chunk_size)
 
         self._abstract_helper = AbstractCollector()
+        self._cache = Cache(os.path.join(
+            os.path.dirname(__file__),
+            '.cache',
+            self.__class__.__name__,
+            self._config.cache_dir()))
 
-    def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[np.ndarray]:
+    def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[Embedding]:
         """
         Abstract method to compute search keys embeddings.
         :param search_keys: the list of SearchKey to embed
@@ -102,13 +108,41 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
         """
         raise NotImplementedError
 
-    def _embed_abstracts(self, abstracts: List[str]) -> List[np.ndarray]:
+    def _embed_abstracts(self, abstracts: List[str]) -> List[Embedding]:
         """
         Abstract method to compute abstracts embeddings.
         :param abstracts: the list of abstracts to embed
         :return: a list of embeddings
         """
         raise NotImplementedError
+
+    def _update_cache(self, embeddings: List[Embedding]):
+        """
+        Update cache entries with new embeddings
+        :param embeddings: a list of Embedding
+        :return:
+        """
+        for embedding in embeddings:
+            self._cache.set(embedding.key, embedding)  # ALWAYS override!
+
+    def _get_cached_entries(self, keys: List[Union[str, SearchKey]]) -> Tuple[List[Embedding],
+                                                                              List[Union[str, SearchKey]]]:
+        """
+        Retrieve already computed embeddings from cache
+        :param keys: a list of keys to retrieve
+        :return: a tuple (<cached results>, <labels to embed>)
+        """
+        to_compute = []
+        cached_entries = []
+
+        for key in keys:
+            entry = self._cache.get(key)
+            if entry is None:
+                to_compute.append(key)
+            else:
+                cached_entries.append(entry)
+
+        return cached_entries, to_compute
 
     def _select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
@@ -119,8 +153,13 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
         lookup_results = dict(self._lookup_candidates(search_keys))  # collect lookup result from the super class
 
         # create embed for each label and context pair
-        search_keys_embs = dict(zip(search_keys, self._embed_search_keys(search_keys)))
+        cached_entries, to_compute = self._get_cached_entries(search_keys)
+        new_results = self._embed_search_keys(to_compute)
+        self._update_cache(new_results)  # write new entries to cache
 
+        search_keys_embs = dict(cached_entries + new_results)
+
+        # create embed for the candidates' abstracts
         if self._config.abstract == 'short':
             abstracts = self._abstract_helper.fetch_short_abstracts(
                 functools.reduce(operator.iconcat, lookup_results.values(), []),
@@ -129,7 +168,14 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
             abstracts = self._abstract_helper.fetch_long_abstracts(
                 functools.reduce(operator.iconcat, lookup_results.values(), []),
                 int(self._config.abstract_max_tokens))
-        abstracts_embs = dict(zip(abstracts.keys(), self._embed_abstracts(list(abstracts.values()))))
+
+        cached_entries, to_compute = self._get_cached_entries(abstracts.values())
+        new_results = self._embed_abstracts(to_compute)
+        self._update_cache(new_results)
+        abstracts_embeddings = dict(cached_entries + new_results)
+
+        # do not zip! abstracts.values() might contain duplicates...
+        abstracts_embs = {candidate: abstracts_embeddings[abstract] for candidate, abstract in abstracts.items()}
 
         results = []
         for search_key in search_keys:

@@ -7,6 +7,9 @@ class SearchKey(NamedTuple):
     label: str
     context: str
 
+    def to_str(self):
+        return "%s %s" % (self.label, self.context)
+
 
 class LookupResult(NamedTuple):
     label: str

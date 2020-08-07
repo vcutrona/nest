@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import NamedTuple, List, Optional
+from typing import NamedTuple, List, Optional, Union
 
 import numpy as np
 
@@ -26,6 +26,9 @@ class EmbeddingCandidateGeneratorConfig(CandidateGeneratorConfig):
                          "abstract:%s|abstract_max_tokens:%d|default_score:%s|alpha:%.2f"
                          % (self.abstract, self.abstract_max_tokens, str(self.default_score), self.alpha)])
 
+    def cache_dir(self):
+        raise NotImplementedError
+
 
 @dataclass
 class FastBertConfig(EmbeddingCandidateGeneratorConfig):
@@ -33,6 +36,11 @@ class FastBertConfig(EmbeddingCandidateGeneratorConfig):
 
     def config_str(self) -> str:
         return "|".join([super().config_str(), "strategy:%s" % self.strategy])
+
+    def cache_dir(self):
+        return "abstract:%s|abstract_max_tokens:%d|strategy:%s" % (self.abstract,
+                                                                   self.abstract_max_tokens,
+                                                                   self.strategy)
 
 
 @dataclass
@@ -45,6 +53,11 @@ class AbstractCollectorConfig:
 class GeneratorResult(NamedTuple):
     search_key: SearchKey
     candidates: List[str] = []
+
+
+class Embedding(NamedTuple):
+    key: Union[str, SearchKey]
+    embedding: np.ndarray
 
 
 class CandidateEmbeddings(NamedTuple):

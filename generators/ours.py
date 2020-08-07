@@ -5,7 +5,7 @@ import numpy as np
 from allennlp.commands.elmo import ElmoEmbedder
 from sentence_transformers import SentenceTransformer
 
-from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig
+from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig, Embedding
 from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
 from lookup import LookupService
@@ -55,7 +55,7 @@ class FastElmo(EmbeddingCandidateGenerator):
 
         return embeds
 
-    def _embed_search_keys(self, search_keys: List[SearchKey], mode="layer_2") -> List[np.ndarray]:
+    def _embed_search_keys(self, search_keys: List[SearchKey], mode="layer_2") -> List[Embedding]:
         """
         Generates the sentence embeddings from ELMO for each search key in a list of SearchKey items.
         :param search_keys: the list of SearchKey to embed
@@ -64,15 +64,17 @@ class FastElmo(EmbeddingCandidateGenerator):
         :return: a list of embeddings
         """
         sentences = [" ".join([search_key.label, search_key.context]) for search_key in search_keys]
-        return self._embed_sentences(sentences, mode)
+        return [Embedding(search_key, embedding)
+                for search_key, embedding in zip(search_keys, self._embed_sentences(sentences, mode))]
 
-    def _embed_abstracts(self, abstracts: List[str], mode='layer_2') -> List[np.ndarray]:
+    def _embed_abstracts(self, abstracts: List[str], mode='layer_2') -> List[Embedding]:
         """
         Generates the sentence embeddings from ELMO for each abstract in list.
         :param abstracts: the list of abstracts to embed
         :return: a list of embeddings
         """
-        return self._embed_sentences(abstracts, mode)
+        return [Embedding(abstract, embedding)
+                for abstract, embedding in zip(abstracts, self._embed_sentences(abstracts, mode))]
 
 
 class FastBert(EmbeddingCandidateGenerator):
@@ -85,37 +87,41 @@ class FastBert(EmbeddingCandidateGenerator):
         super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
         self._model = SentenceTransformer('bert-base-nli-mean-tokens')
 
-    def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[np.ndarray]:
+    def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[Embedding]:
         """
         Generates the sentence/contextual embeddings from BERT for each search key in a list of SearchKey items.
         :param search_keys: the list of SearchKey to embed
         :return: a list of embeddings
         """
-        sentences = [simplify_string(" ".join([search_key.label, search_key.context])) for search_key in search_keys]
+        sentences = [simplify_string(search_key.to_str()) for search_key in search_keys]
         if self._config.strategy == 'sentence':
-            return self._model.encode(sentences)
+            return [Embedding(search_key, embedding)
+                    for search_key, embedding in zip(search_keys, self._model.encode(sentences))]
         else:
             token_embeddings_list = self._model.encode(sentences, output_value='token_embeddings')
             contextual_embeddings = []
             if self._config.strategy == 'context':
                 for search_key, token_embeddings in zip(search_keys, token_embeddings_list):
-                    label_tokens = self._model.tokenize(search_key.label)
-                    contextual_embeddings.append(np.mean(token_embeddings[1:len(label_tokens) + 1], axis=0))
+                    label_tokens = self._model.tokenize(simplify_string(search_key.label))
+                    contextual_embeddings.append(Embedding(search_key,
+                                                           np.mean(token_embeddings[1:len(label_tokens) + 1], axis=0)))
             elif self._config.strategy == 'cls':
-                for token_embeddings in token_embeddings_list:
-                    contextual_embeddings.append(token_embeddings[0])
+                for search_key, token_embeddings in zip(search_keys, token_embeddings_list):
+                    contextual_embeddings.append(Embedding(search_key, token_embeddings[0]))
             else:
                 raise Exception
 
             return contextual_embeddings
 
-    def _embed_abstracts(self, abstracts: List[str]) -> List[np.ndarray]:
+    def _embed_abstracts(self, abstracts: List[str]) -> List[Embedding]:
         """
         Generates the sentence embeddings from BERT for each abstract in list.
         :param abstracts: the list of abstracts to embed
         :return: a list of embeddings
         """
-        return self._model.encode([simplify_string(abstract) for abstract in abstracts])
+        return [Embedding(abstract, embedding)
+                for abstract, embedding in zip(abstracts, self._model.encode([simplify_string(abstract)
+                                                                              for abstract in abstracts]))]
 
 # fe = FastElmo()
 # print(fe.search("Bobtail", "Cat Female 7 10 Red"))  # breed, species, sex, age, weight, colour
