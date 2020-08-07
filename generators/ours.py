@@ -93,7 +93,7 @@ class FastBert(EmbeddingCandidateGenerator):
         :param search_keys: the list of SearchKey to embed
         :return: a list of embeddings
         """
-        sentences = [simplify_string(search_key.to_str()) for search_key in search_keys]
+        sentences = ["%s %s" % (search_key.label, simplify_string(search_key.context)) for search_key in search_keys]
         if self._config.strategy == 'sentence':
             return [Embedding(search_key, embedding)
                     for search_key, embedding in zip(search_keys, self._model.encode(sentences))]
@@ -102,7 +102,7 @@ class FastBert(EmbeddingCandidateGenerator):
             contextual_embeddings = []
             if self._config.strategy == 'context':
                 for search_key, token_embeddings in zip(search_keys, token_embeddings_list):
-                    label_tokens = self._model.tokenize(simplify_string(search_key.label))
+                    label_tokens = self._model.tokenize(search_key.label)
                     contextual_embeddings.append(Embedding(search_key,
                                                            np.mean(token_embeddings[1:len(label_tokens) + 1], axis=0)))
             elif self._config.strategy == 'cls':
