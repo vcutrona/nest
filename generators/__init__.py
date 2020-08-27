@@ -94,11 +94,13 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
         super().__init__(lookup_service, config, threads, chunk_size)
 
         self._abstract_helper = AbstractCollector()
-        self._cache = Cache(os.path.join(
-            os.path.dirname(__file__),
-            '.cache',
-            self.__class__.__name__,
-            self._config.cache_dir()))
+        self._cache = Cache(
+            os.path.join(
+                os.path.dirname(__file__),
+                '.cache',
+                self.__class__.__name__,
+                self._config.cache_dir()),
+            size_limit=int(8e9))
 
     def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[Embedding]:
         """
