@@ -12,7 +12,7 @@ from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGen
 from data_model.lookup import SearchKey
 from generators.utils import AbstractCollector
 from lookup import LookupService
-from utils.functions import chunk_list, weighting_by_ranking
+from utils.functions import chunk_list, weighting_by_ranking, truncate_string
 
 
 class CandidateGenerator:
@@ -162,14 +162,13 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
         search_keys_embs = dict(cached_entries + new_results)
 
         # create embed for the candidates' abstracts
+        candidates_list = functools.reduce(operator.iconcat, lookup_results.values(), [])
         if self._config.abstract == 'short':
-            abstracts = self._abstract_helper.fetch_short_abstracts(
-                functools.reduce(operator.iconcat, lookup_results.values(), []),
-                int(self._config.abstract_max_tokens))
+            abstracts = self._abstract_helper.fetch_short_abstracts(candidates_list)
         else:
-            abstracts = self._abstract_helper.fetch_long_abstracts(
-                functools.reduce(operator.iconcat, lookup_results.values(), []),
-                int(self._config.abstract_max_tokens))
+            abstracts = self._abstract_helper.fetch_long_abstracts(candidates_list)
+        abstracts = {candidate: truncate_string(abstract, self._config.abstract_max_tokens)
+                     for candidate, abstract in abstracts.items()}
 
         cached_entries, to_compute = self._get_cached_entries(abstracts.values())
         new_results = self._embed_abstracts(to_compute)

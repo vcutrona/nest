@@ -38,23 +38,11 @@ class AbstractCollector:
         """
         return {doc_id: doc['description'] for doc_id, doc in self._get_es_docs_by_ids(docs_ids)}
 
-    @staticmethod
-    def _cut_abstract(abstract, size) -> str:
-        """
-        Shorten an abstract to size ``size``.
-        :param abstract: the abstract to shorten
-        :param size: the new desired length
-        :return: the shortened abstract
-        """
-        return " ".join(abstract.split(" ")[:size]).strip()
-
-    def fetch_long_abstracts(self, uris, max_tokens=None):
+    def fetch_long_abstracts(self, uris):
         """
         Retrieve long abstracts (dbo:abstract) of DBpedia entities, from a SPARQL endpoint.
         If more than one abstract is found, only the first will be returned.
         :param uris: list of URIs
-        :param max_tokens: max length of the abstracts; if longer, they will be cut to fit the desired length.
-               If None, the full abstract will be returned.
         :return: a dictionary Dict(uri, abstract)
         """
 
@@ -70,21 +58,19 @@ class AbstractCollector:
             }
             """ % uris_list)
 
-            results += [(result["uri"]["value"], self._cut_abstract(result["abstract"]["value"], max_tokens))
+            results += [(result["uri"]["value"], result["abstract"]["value"])
                         for result in self._sparql.query().convert()["results"]["bindings"]]
 
         return dict(results)
 
-    def fetch_short_abstracts(self, uris, max_tokens=None):
+    def fetch_short_abstracts(self, uris):
         """
         Retrieve short abstracts of DBpedia entities, from an ElasticSearch index.
         If more than one abstract is found, only the first will be returned.
         :param uris: list of URIs
-        :param max_tokens: max length of the abstracts; if longer, they will be cut to fit the desired length.
-               If None, the full abstract will be returned.
         :return: a dictionary Dict(uri, abstract)
         """
-        return {entity_uri: self._cut_abstract(entity_abstracts[0], max_tokens) if entity_abstracts else ''
+        return {entity_uri: entity_abstracts[0] if entity_abstracts else ''
                 for entity_uri, entity_abstracts in self._get_abstracts_by_ids(uris).items()}
 
 # class Scorer(Enum):

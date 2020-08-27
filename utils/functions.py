@@ -1,5 +1,5 @@
 import re
-import string
+import string as string_utils
 from typing import List
 from typing import Tuple, Dict, Set
 
@@ -40,6 +40,16 @@ def strings_subsequences(strings: List[str], max_subseq_len) -> Tuple[Dict[str, 
                                 for i in reversed(range(min(max_subseq_len, len(tokens))))]
         subsequences_set.update(subsequences[string])
     return subsequences, subsequences_set
+
+
+def truncate_string(string, max_tokens) -> str:
+    """
+    Truncate a string after a certain number of tokens.
+    :param string: the string to truncate
+    :param max_tokens: number of desired tokens
+    :return: the truncated string
+    """
+    return " ".join(string.split(" ")[:max_tokens]).strip()
 
 
 def weighting_by_ranking(candidates: List[CandidateEmbeddings], alpha=0.5, default_score=None) -> List[ScoredCandidate]:
@@ -113,7 +123,7 @@ def _remove_dates(input_str):
             parse(token)
         except:
             try:
-                parse(re.sub(f"[{string.punctuation}]", '', token))  # try to remove also symbols (like ?3,600 -> 3600)
+                parse(re.sub(f"[{string_utils.punctuation}]", '', token))  # remove punctuation (?3,600 -> 3600)
             except:
                 f.append(token)
 
