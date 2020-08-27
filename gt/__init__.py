@@ -39,7 +39,7 @@ class GTEnum(Enum):
                 'CTRL_NOISE2': (['CTRL', 'NOISE2'], []),
                 'TOUGH_T2D': (['T2D'], ['NOISE2']),
                 'TOUGH_HOMO': (['HOMO'], ['SORTED', 'NOISE2']),
-                'TOUGH_OD': (['OD'], ['NOISE2']),
+                'TOUGH_MISC': (['MISC'], ['NOISE2']),
                 'TOUGH_MISSP': (['MISSP'], ['NOISE1', 'NOISE2']),
                 'TOUGH_SORTED': (['SORTED'], ['NOISE2']),
                 'TOUGH_NOISE1': (['NOISE1'], []),
