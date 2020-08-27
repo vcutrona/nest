@@ -144,7 +144,8 @@ def _remove_brackets(input_str):
     """
 
     max_pos = len(" ".join(input_str.split()[:5]))  # check if the bracket occurs in the first 5 tokens
-    if '(' in input_str and ')' in input_str:
+    # check missplaced brackets (see dbr:Sherkot comment)
+    if '(' in input_str and ')' in input_str and input_str.index('(') < input_str.index(')'):
         bracket_idx = input_str.index("(")  # get the bracket index
     else:
         return input_str
