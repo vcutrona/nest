@@ -1,3 +1,5 @@
+import urllib.parse
+
 import requests
 from elasticsearch import Elasticsearch, TransportError
 from elasticsearch_dsl import Q, Search
@@ -89,8 +91,9 @@ class WikipediaSearch(LookupService):
         :param labels: a list of labels
         :return: a list of LookupResult
         """
-        return [LookupResult(short_label, [x.replace("https://en.wikipedia.org/wiki/",
-                                                     "http://dbpedia.org/resource/") for x in result[3]])
+        return [LookupResult(short_label, [urllib.parse.unquote(x.replace("https://en.wikipedia.org/wiki/",
+                                                                          "http://dbpedia.org/resource/"))
+                                           for x in result[3]])
                 if isinstance(result, list) else LookupResult(short_label, [])
                 for short_label, result in self._get_wiki_docs(labels)]
 
