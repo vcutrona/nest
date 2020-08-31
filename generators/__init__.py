@@ -3,6 +3,7 @@ import operator
 import os
 from typing import List, Tuple, Union
 
+import numpy as np
 from diskcache import Cache
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
@@ -181,11 +182,11 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
         results = []
         for search_key in search_keys:
             candidates_embeddings = []
-            context_emb = None
+            context_emb = np.nan
             if search_key.context and search_keys_embs[search_key].size:
                 context_emb = search_keys_embs[search_key]
             for candidate in lookup_results[search_key]:
-                abstract_emb = None
+                abstract_emb = np.nan
                 if candidate in abstracts and abstracts_embs[candidate].size:
                     abstract_emb = abstracts_embs[candidate]
                 candidates_embeddings.append(CandidateEmbeddings(candidate, context_emb, abstract_emb))

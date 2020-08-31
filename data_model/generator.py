@@ -18,7 +18,7 @@ class CandidateGeneratorConfig:
 class EmbeddingCandidateGeneratorConfig(CandidateGeneratorConfig):
     abstract: str
     abstract_max_tokens: int
-    default_score: Optional[float] = None
+    default_score: float = np.nan
     alpha: float = 0.5
 
     def config_str(self) -> str:
@@ -62,8 +62,8 @@ class Embedding(NamedTuple):
 
 class CandidateEmbeddings(NamedTuple):
     candidate: str
-    context_emb: np.ndarray = None
-    abstract_emb: np.ndarray = None
+    context_emb: np.ndarray = np.nan
+    abstract_emb: np.ndarray = np.nan
 
 
 class ScoredCandidate(NamedTuple):
