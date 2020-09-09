@@ -37,7 +37,7 @@ class ESLookupConfig(LookupServiceConfig):
     enable_cache: bool = True
 
     def cache_dir(self):
-        return "index:%s|size:%d|fuzziness:%s|prefix_length:%s|max_expansions:%s" % \
+        return "index=%s__size=%d__fuzziness=%s__prefix_length=%s__max_expansions=%s" % \
                (self.index, self.size, str(self.fuzziness), str(self.prefix_length), str(self.max_expansions))
 
 
@@ -49,7 +49,7 @@ class WikipediaSearchConfig(LookupServiceConfig):
     enable_cache: bool = True
 
     def cache_dir(self):
-        return "limit:%d|profile:%s" % (self.limit, self.profile)
+        return "limit=%d__profile=%s" % (self.limit, self.profile)
 
 
 @dataclass
@@ -59,4 +59,4 @@ class DBLookupConfig(LookupServiceConfig):
     enable_cache: bool = True
 
     def cache_dir(self):
-        return "max_hits:%d" % self.max_hits
+        return "max_hits=%d" % self.max_hits
