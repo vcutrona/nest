@@ -42,7 +42,7 @@ class ESLookupConfig(LookupServiceConfig):
 
 
 @dataclass
-class WikipediaSearchConfig:
+class WikipediaSearchConfig(LookupServiceConfig):
     url: str
     limit: int = 10
     profile: str = 'engine_autoselect'
@@ -53,7 +53,7 @@ class WikipediaSearchConfig:
 
 
 @dataclass
-class DBLookupConfig:
+class DBLookupConfig(LookupServiceConfig):
     url: str
     max_hits: int = 5
     enable_cache: bool = True
