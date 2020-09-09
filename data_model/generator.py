@@ -11,7 +11,7 @@ class CandidateGeneratorConfig:
     max_subseq_len: Optional[int]
 
     def config_str(self) -> str:
-        return "max_subseq_len:%s" % str(self.max_subseq_len)
+        return "max_subseq_len=%s" % str(self.max_subseq_len)
 
 
 @dataclass
@@ -22,9 +22,9 @@ class EmbeddingCandidateGeneratorConfig(CandidateGeneratorConfig):
     alpha: float = 0.5
 
     def config_str(self) -> str:
-        return "|".join([super().config_str(),
-                         "abstract:%s|abstract_max_tokens:%d|default_score:%s|alpha:%.2f"
-                         % (self.abstract, self.abstract_max_tokens, str(self.default_score), self.alpha)])
+        return "__".join([super().config_str(),
+                          "abstract=%s__abstract_max_tokens=%d__default_score=%s__alpha=%.2f"
+                          % (self.abstract, self.abstract_max_tokens, str(self.default_score), self.alpha)])
 
     def cache_dir(self):
         raise NotImplementedError
@@ -35,12 +35,12 @@ class FastBertConfig(EmbeddingCandidateGeneratorConfig):
     strategy: str = 'context'
 
     def config_str(self) -> str:
-        return "|".join([super().config_str(), "strategy:%s" % self.strategy])
+        return "__".join([super().config_str(), "strategy=%s" % self.strategy])
 
     def cache_dir(self):
-        return "abstract:%s|abstract_max_tokens:%d|strategy:%s" % (self.abstract,
-                                                                   self.abstract_max_tokens,
-                                                                   self.strategy)
+        return "abstract=%s__abstract_max_tokens=%d__strategy=%s" % (self.abstract,
+                                                                     self.abstract_max_tokens,
+                                                                     self.strategy)
 
 
 @dataclass

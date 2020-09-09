@@ -22,3 +22,20 @@ class LookupGenerator(CandidateGenerator):
         :return: a list of GeneratorResult
         """
         return self._lookup_candidates(search_keys)
+
+
+class Hybrid(CandidateGenerator):
+    """
+    A generator that just forwards lookup results.
+    """
+    def __init__(self, lookup_service: LookupService, config=CandidateGeneratorConfig(5),
+                 threads=mp.cpu_count(), chunk_size=5000):
+        super().__init__(lookup_service, config, threads, chunk_size)
+
+    def _select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+        """
+        Candidate selection method. This implementation just forwards the LookupService results.
+        :param search_keys: a list of SearchKeys to use for the candidate retrieval
+        :return: a list of GeneratorResult
+        """
+        return self._lookup_candidates(search_keys)
