@@ -1,4 +1,5 @@
 import urllib.parse
+from xml.etree import ElementTree
 
 import requests
 from elasticsearch import Elasticsearch, TransportError
@@ -106,7 +107,6 @@ class DBLookup(LookupService):
     def __init__(self, config: DBLookupConfig = DBLookupConfig('http://lookup.dbpedia.org/api/search/KeywordSearch')):
         super().__init__(config)
         self._session = requests.Session()
-        self._session.headers.update({'Accept': 'application/json'})
 
     def _get_db_docs(self, labels):
         """
@@ -119,7 +119,8 @@ class DBLookup(LookupService):
                 "QueryString": label,
                 "MaxHits": self._config.max_hits
             }
-            yield label, self._session.get(url=self._config.url, params=params).json()
+            yield label, ElementTree.XML(
+                self._session.get(url=self._config.url, params=params).content).findall('Result')
 
     def _lookup(self, labels) -> [LookupResult]:
         """
@@ -127,5 +128,5 @@ class DBLookup(LookupService):
         :param labels: a list of labels
         :return: a list of LookupResult
         """
-        return [LookupResult(short_label, [x['uri'] for x in result['results']])
-                for short_label, result in self._get_db_docs(labels)]
+        return [LookupResult(short_label, [result.find('URI').text for result in results])
+                for short_label, results in self._get_db_docs(labels)]
