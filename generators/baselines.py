@@ -24,7 +24,7 @@ class LookupGenerator(CandidateGenerator):
         return self._lookup_candidates(search_keys)
 
 
-class Hybrid(CandidateGenerator):
+class FactBaseLookupGenerator(CandidateGenerator):
     """
     A generator that just forwards lookup results.
     """

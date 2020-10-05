@@ -45,7 +45,8 @@ class FastBertConfig(EmbeddingCandidateGeneratorConfig):
 
 @dataclass
 class AbstractCollectorConfig:
-    es_host: str = 'localhost'
+    #es_host: str = 'localhost'
+    es_host: str = 'http://149.132.176.50/'
     index: str = 'dbpedia'
     sparql_endpoint: str = 'http://dbpedia.org/sparql'
 
