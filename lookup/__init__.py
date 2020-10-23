@@ -56,7 +56,7 @@ class LookupService(ABC):
         """
         raise NotImplementedError
 
-    def lookup(self, labels: [str]) -> List[LookupResult]:
+    def lookup(self, labels: List[str]) -> List[LookupResult]:
         """
         Returns a list of LookupResult, based on the given labels.
         Results are fetched from a local cache, if enabled. If not enabled, already cached results (if any)

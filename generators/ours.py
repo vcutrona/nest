@@ -63,7 +63,7 @@ class FastElmo(EmbeddingCandidateGenerator):
                      "mean" gets the embedding of the three elmo layers for each token
         :return: a list of embeddings
         """
-        sentences = [" ".join([search_key.label, search_key.context]) for search_key in search_keys]
+        sentences = [" ".join([search_key.label] + list(search_key.context.values())) for search_key in search_keys]
         return [Embedding(search_key, embedding)
                 for search_key, embedding in zip(search_keys, self._embed_sentences(sentences, mode))]
 
@@ -93,7 +93,8 @@ class FastBert(EmbeddingCandidateGenerator):
         :param search_keys: the list of SearchKey to embed
         :return: a list of embeddings
         """
-        sentences = ["%s %s" % (search_key.label, simplify_string(search_key.context)) for search_key in search_keys]
+        sentences = ["%s %s" % (search_key.label, simplify_string(search_key.context.values()))
+                     for search_key in search_keys]
         if self._config.strategy == 'sentence':
             return [Embedding(search_key, embedding)
                     for search_key, embedding in zip(search_keys, self._model.encode(sentences))]

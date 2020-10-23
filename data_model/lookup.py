@@ -1,14 +1,11 @@
-from typing import NamedTuple, List
 from dataclasses import dataclass
+from typing import NamedTuple, List, Dict
 from typing import Optional
 
 
 class SearchKey(NamedTuple):
     label: str
-    context: str
-
-    def to_str(self):
-        return "%s %s" % (self.label, self.context)
+    context: Dict[int, str]
 
 
 class LookupResult(NamedTuple):

@@ -1,7 +1,7 @@
 import functools
 import operator
 import os
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Iterable
 
 import numpy as np
 from diskcache import Cache
@@ -55,7 +55,7 @@ class CandidateGenerator:
         """
         raise NotImplementedError
 
-    def multi_search(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def multi_search(self, search_keys: Iterable[SearchKey]) -> List[GeneratorResult]:
         """
         Parallel candidate retrieval execution
         :param search_keys: a list of search keys

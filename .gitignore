@@ -3,10 +3,8 @@ experiments/*/
 experiments/*.csv
 generators/*.json
 generators/*.hdf5
-gt/*/
-gt/*.csv
-gt/*.sh
-gt/*.txt
+datasets/*
+!datasets/*.py
 resources/
 scripts/
 *_results*.json

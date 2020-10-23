@@ -7,7 +7,7 @@ from skopt import forest_minimize
 from skopt.space import Real, Integer, Categorical
 
 from data_model.generator import FastBertConfig
-from experiments.evaluation import Evaluator
+from experiments.evaluation import CEAEvaluator
 from generators.ours import FastBert
 from lookup.services import WikipediaSearch
 
@@ -35,7 +35,7 @@ def ml_algorithm(suggestion):
     cfg = FastBertConfig(*config_values_from_sugg(suggestion))
     print(suggestion)
     print(cfg)
-    evaluator = Evaluator(FastBert(WikipediaSearch(), cfg))
+    evaluator = CEAEvaluator(FastBert(WikipediaSearch(), cfg))
     # score_dict = evaluator.score(GTEnum.get_test_gt(10))
     score_dict = evaluator.score_all()
     metrics = []
@@ -55,17 +55,18 @@ eval_dict = {}
 if os.path.isfile('eval_dict.pkl'):
     eval_dict = pickle.load(open('eval_dict.pkl', 'rb'))
 
-hpo_results = forest_minimize(ml_algorithm, space, n_calls=100, random_state=42, base_estimator="RF")
+for i in range(3):
+    hpo_results = forest_minimize(ml_algorithm, space, n_calls=100, random_state=42 + i, base_estimator="RF")
 
-# Optimal solution
-optimal_config = hpo_results.x
-optimal_config_evaluation = hpo_results.fun
-# History solutions
-history_config = hpo_results.x_iters
-history_config_evaluation = hpo_results.func_vals
+    # Optimal solution
+    optimal_config = hpo_results.x
+    optimal_config_evaluation = hpo_results.fun
+    # History solutions
+    history_config = hpo_results.x_iters
+    history_config_evaluation = hpo_results.func_vals
 
-# Save and load results of HPO experiments
-# Save results
-dump(hpo_results, 'hpo_task_data.pkl')
+    # Save and load results of HPO experiments
+    # Save results
+    dump(hpo_results, f'hpo_task_data_{i}.pkl')
 # Load results
-hpo_loaded_results = load('hpo_task_data.pkl')
+# hpo_loaded_results = load('hpo_task_data.pkl')
