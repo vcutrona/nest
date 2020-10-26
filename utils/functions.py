@@ -168,3 +168,44 @@ def simplify_string(input_str, dates=True, numbers=True, single_char=True, brack
     if single_char:
         s = _remove_single_char(s)
     return s
+
+
+def is_date(string, fuzzy=False):
+    """
+    Return whether the string can be interpreted as a date.
+
+    :param string: str, string to check for date
+    :param fuzzy: bool, ignore unknown tokens in string if True
+    :return a boolean which indicates if it is a date
+    """
+    try:
+        parse(string, fuzzy=fuzzy)
+        return True
+
+    except ValueError:
+        return False
+
+
+def is_float(string):
+    """
+    Return whether the string can be interpreted as a float.
+
+    :param string: str, string to check for float
+    :return a boolean which indicates if it is a float
+    """
+    try:
+        float(string)
+        return True
+
+    except ValueError:
+        return False
+
+
+def toList(list_of_list):
+    """
+    Convert a list of list in a list
+
+    :param list_of_list: a list of list
+    :return: the flattened list
+    """
+    return [item for sublist in list_of_list if sublist is not None for item in sublist]
