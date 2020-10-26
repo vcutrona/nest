@@ -43,13 +43,6 @@ class FastBertConfig(EmbeddingCandidateGeneratorConfig):
                                                                      self.strategy)
 
 
-@dataclass
-class AbstractCollectorConfig:
-    es_host: str = 'localhost'
-    index: str = 'dbpedia'
-    sparql_endpoint: str = 'http://dbpedia.org/sparql'
-
-
 class GeneratorResult(NamedTuple):
     search_key: SearchKey
     candidates: List[str] = []

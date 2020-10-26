@@ -11,7 +11,7 @@ from tqdm.contrib.concurrent import process_map
 from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, \
     CandidateEmbeddings, GeneratorResult, Embedding
 from data_model.lookup import SearchKey
-from generators.utils import AbstractCollector
+from utils.kgs import DBpediaWrapper
 from lookup import LookupService
 from utils.functions import chunk_list, weighting_by_ranking, truncate_string
 
@@ -94,7 +94,7 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
     def __init__(self, lookup_service: LookupService, config: EmbeddingCandidateGeneratorConfig, threads, chunk_size):
         super().__init__(lookup_service, config, threads, chunk_size)
 
-        self._abstract_helper = AbstractCollector()
+        self._abstract_helper = DBpediaWrapper()
         self._cache = Cache(
             os.path.join(
                 os.path.dirname(__file__),

@@ -1,7 +1,6 @@
 import urllib.parse
 from abc import ABC
 from typing import List, Dict, Tuple, Iterable, NamedTuple
-from dataclasses import dataclass, field
 
 import pandas as pd
 from pandas.errors import ParserError

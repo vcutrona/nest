@@ -2,15 +2,15 @@ from SPARQLWrapper import SPARQLWrapper, JSON
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 
-from data_model.generator import AbstractCollectorConfig
+from data_model.kgs import DBpediaWrapperConfig
 
 
-class AbstractCollector:
+class DBpediaWrapper:
     """
-    Helper class to retrieve abstracts for DBpedia entities.
+    Wrapper class to retrieve data from a DBpedia SPARQL endpoint.
     """
 
-    def __init__(self, config: AbstractCollectorConfig = AbstractCollectorConfig()):
+    def __init__(self, config: DBpediaWrapperConfig = DBpediaWrapperConfig()):
         self._config = config
         assert Elasticsearch(self._config.es_host).ping()
 
@@ -73,8 +73,34 @@ class AbstractCollector:
         return {entity_uri: entity_abstracts[0] if entity_abstracts else ''
                 for entity_uri, entity_abstracts in self._get_abstracts_by_ids(uris).items()}
 
-# class Scorer(Enum):
-#     DISTANCE = 0
-#     WEIGHTED_RANK = 1
-#
-#     def score(self, candidates):
+    def get_relations(self, subj_obj_pairs):
+        """
+        Retrieve the relations existing between subject-value pairs.
+        :param subj_obj_pairs: list of subject-value (URI-literal) pairs
+        :return: a dict subj_obj_pair: [properties]
+        """
+
+        query = """
+        SELECT distinct ?entity ?value ?rel
+            WHERE {
+              VALUES (?entity ?value) {
+                  %s
+              }
+              { ?entity ?rel ?aValue . }
+              UNION
+              { ?entity ?rel [rdfs:label ?aValue] . }
+              FILTER(lcase(str(?aValue))=?value)
+            }
+        """
+        results = {}
+        for i in range(0, len(subj_obj_pairs), 25):
+            query_values = " ".join(map(lambda x: '(<%s> "%s")' % x, subj_obj_pairs[i:i + 25]))
+            self._sparql.setQuery(query % query_values)
+            for result in self._sparql.query().convert()["results"]["bindings"]:
+                key, value = (result['entity']['value'], result["value"]['value']), result["rel"]['value']
+                if key not in results:
+                    results[key] = []
+                results[key].append(value)
+
+        return results
+
