@@ -13,6 +13,7 @@ class GTEnum(Enum):
     CEA_Round3 = 'CEA_Round3.csv'
     CEA_Round4 = 'CEA_Round4.csv'
     CEA_TT = 'CEA_TT.csv'
+    T2D_Targets = 'T2D_Targets.csv'
 
     def get_df(self):
         """

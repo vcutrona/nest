@@ -99,7 +99,8 @@ def _remove_dates(input_str):
     :param input_str: a string
     :return:
     """
-    s = re.sub(r'([a-zA-Z]+)([0-9]+)', r'\1 \2', input_str)  # split tokens like 2011-11-29November -> 2011-11-29 November
+    s = re.sub(r'([a-zA-Z]+)([0-9]+)', r'\1 \2',
+               input_str)  # split tokens like 2011-11-29November -> 2011-11-29 November
     s = re.sub(r'([0-9]+)([a-zA-Z]+)', r'\1 \2 ', s)  # split tokens like November2011 -> November 2011
 
     tokens = s.split()
@@ -170,35 +171,20 @@ def simplify_string(input_str, dates=True, numbers=True, single_char=True, brack
     return s
 
 
-def is_date(string, fuzzy=False):
+def firstSentence(input_str):
     """
-    Return whether the string can be interpreted as a date.
+    Take only the first sentence in a text by removing all the text after the first dot.
+    It also uses a regex "don't consider dots if they have only one or two character before".
 
-    :param string: str, string to check for date
-    :param fuzzy: bool, ignore unknown tokens in string if True
-    :return a boolean which indicates if it is a date
+    :param input_str: the text
+    :return: the first sentence
     """
-    try:
-        parse(string, fuzzy=fuzzy)
-        return True
-
-    except ValueError:
-        return False
-
-
-def is_float(string):
-    """
-    Return whether the string can be interpreted as a float.
-
-    :param string: str, string to check for float
-    :return a boolean which indicates if it is a float
-    """
-    try:
-        float(string)
-        return True
-
-    except ValueError:
-        return False
+    list_ = re.findall("(\s.[.]|\s..[.])", input_str)
+    for x in list_:
+        if x in input_str:
+            input_str = input_str.replace(x, '')
+    if len(input_str) > 0:
+        return input_str.partition('.')[0]
 
 
 def toList(list_of_list):

@@ -1,38 +1,36 @@
+import csv
 import pandas as pd
 
-from lookup.services import DBLookup, ESLookup
+from lookup.services import DBLookup
 from generators.utils import AbstractCollector
-import factbase_lookup
-from utils import functions
+from factbase_lookup import sortTable, getLabelColumn, getReferenceColumns, \
+    getTypes, getDescriptionTokens, containsFact, getMostFrequent, atLeast5, \
+    getFirst, search_strict, search_loose
+from utils.functions import toList
 
 abc = AbstractCollector()
 dblookup = DBLookup()
-eslookup = ESLookup()
 
-base_dir = 'Round 1'
-target = base_dir + '/targets/CEA_Round1_Targets11.csv'
-factbase_lookup.sortTable(target, 'table')
-table = pd.read_csv(target)
+base_dir = 'T2D_GoldStandard'
+target = base_dir + '/T2D_Targets.csv'
+table = pd.read_csv(sortTable(target, 'table'))
 annotated_table = table.copy()
 
 labelList = []
 acceptableTypes = []
 descriptionTokens = []
-labelColumn = factbase_lookup.getLabelColumn(table)
-referenceColumns = factbase_lookup.getReferenceColumns(table)
+labelColumn = getLabelColumn(table)
+referenceColumns = getReferenceColumns(table)
 
 annotationList = ["not annotated"] * table.shape[0]
-index = 0
-count = 0
+index, count = 0, 0
 
-for row in range(len(labelColumn)):  # n di file
+for row in range(len(labelColumn)):
     count += index
     index = 0
+    allTypes, descTokens, candidateRelations, relations = [], [], [], []
+    firstResult = []
 
-    allTypes = []
-    descTokens = []
-    candidateRelations = []
-    relations = []
     for label in labelColumn[row]:
         labelList.append(label)
 
@@ -40,26 +38,29 @@ for row in range(len(labelColumn)):  # n di file
 
         if len(results) > 0:
             topResult = results[0]
-            allTypes.append(factbase_lookup.getTypes(topResult))
-            descTokens.append(factbase_lookup.getDescriptionTokens(topResult))
+            firstResult.append(results[0])
+            allTypes.append(getTypes(topResult))
+            descTokens.append(getDescriptionTokens(topResult))
             if len(results) == 1:
                 annotationList[count + index] = topResult
                 for a, v in referenceColumns[row][index].items():
-                    candidateRelations.append(factbase_lookup.containsFact(topResult, a, v))
+                    candidateRelations.append(containsFact(topResult, a, v))
+        else:
+            firstResult.append("not annotated")
 
         index += 1
 
-    allTypes = functions.toList(allTypes)
-    acceptableTypes = factbase_lookup.getMostFrequent(allTypes, n=5)
-    descTokens = functions.toList(descTokens)
-    descriptionTokens = factbase_lookup.getMostFrequent(descTokens)
+    allTypes = toList(allTypes)
+    acceptableTypes = getMostFrequent(allTypes, n=5)
+    descTokens = toList(descTokens)
+    descriptionTokens = getMostFrequent(descTokens)
 
-    candidateRelations = functions.toList(candidateRelations)
-    candidateRelations = factbase_lookup.atLeast5(candidateRelations)
+    candidateRelations = toList(candidateRelations)
+    candidateRelations = atLeast5(candidateRelations)
 
     for attr in referenceColumns[row][index - 1]:
-        relations.append(factbase_lookup.getFirst(candidateRelations, attr))
-    relations = functions.toList(relations)
+        relations.append(getFirst(candidateRelations, attr))
+    relations = toList(relations)
 
     index = 0
 
@@ -68,7 +69,7 @@ for row in range(len(labelColumn)):  # n di file
             index += 1
             continue
 
-        results = factbase_lookup.search_strict(label=label, types=acceptableTypes, description=descriptionTokens)
+        results = search_strict(label=label, types=acceptableTypes, description=descriptionTokens)
 
         if len(results) > 0:
             topResult = results[0]
@@ -77,15 +78,21 @@ for row in range(len(labelColumn)):  # n di file
             continue
 
         for r in relations:
-            results = factbase_lookup.search_loose(label=label, relation=r[1], value=referenceColumns[row][index][r[0]])
-            results = factbase_lookup.sortByEditDistance(list_=results, label=label)
+            results = search_loose(label=label, relation=r[1], value=referenceColumns[row][index][r[0]])
             if len(results) > 0:
                 topResult = results[0]
                 annotationList[count + index] = topResult
                 break
 
+        if annotationList[count + index] == "not annotated" and firstResult[index] != "not annotated":
+            label_ = abc.get_label(firstResult[index])
+
+            if len(label_) > 0:
+                if label_[0] == label:
+                    annotationList[count + index] = firstResult[index]
+
         index += 1
 
-annotated_table["label"] = labelList
-annotated_table["annotation"] = annotationList
-annotated_table.to_csv(base_dir + '/gt/CEA_Round1_gt_lookup.csv')
+#annotated_table["label"] = labelList
+annotated_table["entity"] = annotationList
+annotated_table.to_csv(base_dir + '/lookup/T2D_lookup.csv', quoting=csv.QUOTE_ALL, index=False)

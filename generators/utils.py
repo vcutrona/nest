@@ -1,12 +1,9 @@
-import urllib
-
 import requests
 from SPARQLWrapper import SPARQLWrapper, JSON
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 
 from data_model.generator import AbstractCollectorConfig
-from utils import functions
 
 
 class AbstractCollector:
@@ -81,47 +78,55 @@ class AbstractCollector:
 
     def get_relation(self, uri, value):
         """
-        Retrieve the relation of a specified value (e.g. dbo:"relation") of DBpedia entities, from a SPARQL endpoint.
+        Retrieve the relation of a specified value (e.g. dbo:author) of DBpedia entities, from a SPARQL endpoint.
+
         :param uri: list of URI
-        :param value: name of the relation
-        :return: a list of tuple (uri, name of the relation)
+        :param value: value
+        :return: a list of relations
         """
 
         results = []
         uri = [uri]
-        """exceptions = ["-", "--", "?", "."]
-        if str(value) in exceptions:
-            value = None
-
-        if value is not None:"""
-        if isinstance(value, str):
-            for i in range(0, len(uri), 25):
-                uri = " ".join(map(lambda x: "<%s>" % x, uri[i:i + 25]))
-                self._sparql.setQuery("""
-                SELECT distinct ?rel 
-                  WHERE {{ 
-                    %s ?rel ?value . ?value bif:contains '"%s"'} UNION {
-                    %s ?rel [rdfs:label ?label] . ?label bif:contains '"%s"' } }
-                """ % (uri, value, uri, value))
-                results += [result["rel"]["value"]
-                            for result in self._sparql.query().convert()["results"]["bindings"]]
-                return results
-        elif str(value).isnumeric():
-            xsd = "^^xsd:integer"
-        elif functions.is_float(str(value)):
-            xsd = "^^xsd:double"
-        elif functions.is_date(str(value)):
-            xsd = "^^xsd:date"
 
         for i in range(0, len(uri), 25):
             uri = " ".join(map(lambda x: "<%s>" % x, uri[i:i + 25]))
-            self._sparql.setQuery("""
-            SELECT distinct ?rel 
-              WHERE {{ 
-                %s ?rel '%s'%s} UNION {
-                %s ?rel [rdfs:label '%s'%s] } }
-            """ % (uri, value, xsd, uri, value, xsd))
+            try:
+                self._sparql.setQuery("""
+                SELECT distinct ?rel 
+                  WHERE {{ 
+                    %s ?rel ?value . } UNION {
+                    %s ?rel [rdfs:label ?value] . }
+                    FILTER(lcase(str(?value))="%s") 
+                    } """ % (uri, uri, value))
+            except requests.HTTPError as exception:
+                print(exception)
             results += [result["rel"]["value"]
+                        for result in self._sparql.query().convert()["results"]["bindings"]]
+
+        return results
+
+    def get_label(self, uri):
+        """
+        Retrieve the label of DBpedia entities, from a SPARQL endpoint.
+
+        :param uri: list of URI
+        :return: a list of labels
+        """
+
+        results = []
+        uri = [uri]
+
+        for i in range(0, len(uri), 25):
+            uri = " ".join(map(lambda x: "<%s>" % x, uri[i:i + 25]))
+            try:
+                self._sparql.setQuery("""
+                SELECT distinct ?value 
+                  WHERE {
+                    %s rdfs:label ?value . 
+                  FILTER langMatches( lang(?value), "EN" ) } """ % uri)
+            except requests.HTTPError as exception:
+                print(exception)
+            results += [result["value"]["value"].lower()
                         for result in self._sparql.query().convert()["results"]["bindings"]]
 
         return results
