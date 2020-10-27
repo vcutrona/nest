@@ -7,6 +7,7 @@ from elasticsearch_dsl import Q, Search
 
 from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig
 from lookup import LookupService
+from utils.functions import simplify_string
 
 
 class ESLookup(LookupService):
@@ -29,7 +30,7 @@ class ESLookup(LookupService):
         elastic = Elasticsearch(self._config.host)
         for label in labels:
             s = Search(using=elastic, index=self._config.index)
-            q = {'value': label.lower()}
+            q = {'value': str(label).lower()}
 
             if self._config.fuzziness:
                 q['fuzziness'] = self._config.fuzziness
@@ -39,10 +40,11 @@ class ESLookup(LookupService):
                 q['max_expansions'] = self._config.max_expansions
 
             s.query = Q('bool',
-                        must=[Q('multi_match', query=label.lower(), fields=['surface_form_keyword'], boost=5),
-                              Q({"fuzzy": {"surface_form_keyword": q}})
-                              ],
-                        should=[Q('match', description=label.lower())])
+                        must=[],
+                        should=[Q('match', description=str(label).lower()),
+                                Q('multi_match', query=str(label).lower(), fields=['surface_form_keyword'], boost=5),
+                                Q({"fuzzy": {"surface_form_keyword": q}})]
+                        )
 
             s = s[0:self._config.size]
 

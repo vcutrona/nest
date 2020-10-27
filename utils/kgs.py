@@ -38,6 +38,31 @@ class DBpediaWrapper:
         """
         return {doc_id: doc['description'] for doc_id, doc in self._get_es_docs_by_ids(docs_ids)}
 
+    def get_label(self, uri):
+        """
+        Retrieve the label of DBpedia entities, from a SPARQL endpoint.
+
+        :param uri: list of URI
+        :return: a list of labels
+        """
+
+        results = []
+        uri = [uri]
+
+        for i in range(0, len(uri), 25):
+            uri = " ".join(map(lambda x: "<%s>" % x, uri[i:i + 25]))
+
+            self._sparql.setQuery("""
+            SELECT distinct ?value 
+              WHERE {
+                %s rdfs:label ?value . 
+              FILTER langMatches( lang(?value), "EN" ) } """ % uri)
+
+            results += [result["value"]["value"].lower()
+                        for result in self._sparql.query().convert()["results"]["bindings"]]
+
+        return results
+
     def fetch_long_abstracts(self, uris):
         """
         Retrieve long abstracts (dbo:abstract) of DBpedia entities, from a SPARQL endpoint.
