@@ -100,6 +100,7 @@ class CEADatasetEnum(Enum):
     ST19_Round3 = 'Round3'
     ST19_Round4 = 'Round4'
     TT = '2T'
+    T2D = 'T2D'
 
     def get_targets(self):
         target = pd.read_csv(f"{os.path.dirname(__file__)}/{self.value}/targets/CEA_{self.value}_Targets.csv",
