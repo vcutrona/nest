@@ -109,7 +109,7 @@ class Table(AbstractTable):
     def get_search_key(self, cell: Cell) -> SearchKey:
         row = self.get_row(cell.row_id)
         return SearchKey(row[cell.col_id],
-                         row[self._df.columns.drop(cell.col_id)].to_dict())
+                         tuple(row[self._df.columns.drop(cell.col_id)].to_dict().items()))
 
 
 class GTTable(AbstractTable):

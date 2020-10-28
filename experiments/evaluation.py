@@ -1,3 +1,5 @@
+import os
+import pickle
 from typing import List, Tuple
 
 from data_model.dataset import Entity, GTTable, Table
@@ -52,16 +54,24 @@ class CEAEvaluator:
         # TODO parallelize
         for table in dataset.get_tables():
             if table.tab_id in targets:
-                target = targets[table.tab_id]
+                target_cells = targets[table.tab_id]
+                filename = os.path.join(
+                    os.path.dirname(__file__),
+                    'candidates',
+                    '%s_%s_%s_%s_%s.pkl' % (*self._generator.id, dataset.name, table.tab_id))
+                # check existing results
+                if not os.path.isfile(filename):
+                    # keep the cell-search_key pair -> results may be shuffled!
+                    search_key_cell_dict = {table.get_search_key(cell_): cell_ for cell_ in target_cells}
+                    results = self._generator.multi_search(list(search_key_cell_dict.keys()))
 
-                # TODO check existing results
-                results = self._generator.multi_search(map(lambda cell_: table.get_search_key(cell_), target))
-                for cell, (search_key, candidates) in zip(target, results):
-                    if candidates:
-                        table.annotate_cell(cell, Entity(candidates[0]))
+                    for search_key, candidates in results:
+                        if candidates:
+                            table.annotate_cell(search_key_cell_dict[search_key], Entity(candidates[0]))
 
-                # TODO save results to disk
-                yield table
+                    pickle.dump(table, open(filename, 'wb'))
+
+                yield pickle.load(open(filename, 'rb'))
 
     # def _get_candidates_df(self, gt):
     #     """

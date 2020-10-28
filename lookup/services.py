@@ -7,7 +7,6 @@ from elasticsearch_dsl import Q, Search
 
 from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig
 from lookup import LookupService
-from utils.functions import simplify_string
 
 
 class ESLookup(LookupService):

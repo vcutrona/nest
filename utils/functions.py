@@ -3,12 +3,17 @@ import string as string_utils
 from typing import List
 from typing import Tuple, Dict, Set
 
+import nltk
 import numpy as np
 from dateutil.parser import parse
+from nltk.corpus import stopwords
+from nltk.tokenize import RegexpTokenizer
 from scipy.spatial.distance import cosine
 from sklearn.preprocessing import MinMaxScaler
 
 from data_model.generator import ScoredCandidate, CandidateEmbeddings
+
+nltk.download('stopwords')
 
 
 def chunk_list(list_, chunk_size):
@@ -158,6 +163,14 @@ def _remove_brackets(input_str):
     return input_str
 
 
+def tokenize(sentence: str, language: str = 'english') -> List[str]:
+    """
+    Simple preprocessing: removes punctuation and stopwords
+    """
+    tokenizer = RegexpTokenizer(r'\w+')
+    return [w for w in tokenizer.tokenize(sentence.lower()) if w not in stopwords.words(language)]
+
+
 def simplify_string(input_str, dates=True, numbers=True, single_char=True, brackets=True):
     s = input_str
     if brackets:
@@ -171,7 +184,7 @@ def simplify_string(input_str, dates=True, numbers=True, single_char=True, brack
     return s
 
 
-def firstSentence(input_str):
+def first_sentence(input_str):
     """
     Take only the first sentence in a text by removing all the text after the first dot.
     It also uses a regex "don't consider dots if they have only one or two character before".
@@ -187,11 +200,22 @@ def firstSentence(input_str):
         return input_str.partition('.')[0]
 
 
-def toList(list_of_list):
-    """
-    Convert a list of list in a list
+# def flatten(list_):
+#     """
+#     Convert a list of list in a list
+#
+#     :param list_: flatten a list of lists
+#     :return: the flattened list
+#     """
+#     return [item for sublist in list_ if sublist is not None for item in sublist]
 
-    :param list_of_list: a list of list
-    :return: the flattened list
-    """
-    return [item for sublist in list_of_list if sublist is not None for item in sublist]
+#
+# a = ['Koei (a little test)  2011-11-29November 29, 2011 ?3,600JP 5.67 GB',
+#      'Ubisoft 2012-01-19 2012-01-19  PG (a test)',
+#      'Factor 5 2008-02-29 2008-02-29 7 PG']
+# for s in a:
+#     print(s, '|||', simplify_string(s))
+
+# print(_remove_brackets("Barack Hussein Obama II (US /bəˈrɑːk huːˈseɪn oʊˈbɑːmə/; born August 4, 1961)"))
+# print(_remove_brackets("Del Piero (pronunciation: [del ˈpjɛːro]) Ufficiale OMRI (born 9 November 1974)"))
+# print(_remove_brackets("Alessandro Del Piero Ufficiale OMRI (born 9 November 1974)"))

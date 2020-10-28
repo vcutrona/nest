@@ -43,6 +43,11 @@ class FastBertConfig(EmbeddingCandidateGeneratorConfig):
                                                                      self.strategy)
 
 
+@dataclass
+class FactBaseConfig(CandidateGeneratorConfig):
+    pass  # TODO put parameters
+
+
 class GeneratorResult(NamedTuple):
     search_key: SearchKey
     candidates: List[str] = []

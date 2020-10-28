@@ -1,8 +1,19 @@
+from functools import lru_cache
+from typing import Dict, Tuple, List
+
 from SPARQLWrapper import SPARQLWrapper, JSON
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 
 from data_model.kgs import DBpediaWrapperConfig
+
+PROPERTIES_BLACKLIST = ['http://dbpedia.org/ontology/abstract',
+                        'http://dbpedia.org/ontology/wikiPageWikiLink',
+                        'http://www.w3.org/2000/01/rdf-schema#comment',
+                        'http://purl.org/dc/terms/subject',
+                        ]
+
+TYPES_BLACKLIST = ['http://www.w3.org/2002/07/owl#Thing']
 
 
 class DBpediaWrapper:
@@ -14,8 +25,14 @@ class DBpediaWrapper:
         self._config = config
         assert Elasticsearch(self._config.es_host).ping()
 
-        self._sparql = SPARQLWrapper(self._config.sparql_endpoint)
+        self._sparql = SPARQLWrapper(self._config.sparql_endpoint, defaultGraph=self._config.default_graph)
         self._sparql.setReturnFormat(JSON)
+
+    def _get_es_doc_by_id(self, doc_id):
+        docs = self._get_es_docs_by_ids([doc_id])
+        if docs:
+            return docs[0][1]
+        return {}
 
     def _get_es_docs_by_ids(self, docs_ids):
         """
@@ -40,28 +57,24 @@ class DBpediaWrapper:
 
     def get_label(self, uri):
         """
-        Retrieve the label of DBpedia entities, from a SPARQL endpoint.
+        Returns the labels of a DBpedia entity.
 
-        :param uri: list of URI
+        :param uri: an entity URI
         :return: a list of labels
         """
-
-        results = []
-        uri = [uri]
-
-        for i in range(0, len(uri), 25):
-            uri = " ".join(map(lambda x: "<%s>" % x, uri[i:i + 25]))
-
+        doc = self._get_es_doc_by_id(uri)
+        if 'surface_form_keyword' in doc:
+            return doc['surface_form_keyword']
+        else:
             self._sparql.setQuery("""
-            SELECT distinct ?value 
-              WHERE {
-                %s rdfs:label ?value . 
-              FILTER langMatches( lang(?value), "EN" ) } """ % uri)
+                    SELECT distinct ?label
+                    WHERE {
+                      %s rdfs:label ?label . 
+                    FILTER (langMatches(lang(?label), "EN") || langMatches(lang(?label), "")) }
+                    """ % uri)
 
-            results += [result["value"]["value"].lower()
-                        for result in self._sparql.query().convert()["results"]["bindings"]]
-
-        return results
+            return [result["label"]["value"]
+                    for result in self._sparql.query().convert()["results"]["bindings"]]
 
     def fetch_long_abstracts(self, uris):
         """
@@ -95,13 +108,15 @@ class DBpediaWrapper:
         :param uris: list of URIs
         :return: a dictionary Dict(uri, abstract)
         """
-        return {entity_uri: entity_abstracts[0] if entity_abstracts else ''
-                for entity_uri, entity_abstracts in self._get_abstracts_by_ids(uris).items()}
+        return {doc_id: doc['description'][0] if doc['description'] else ''
+                for doc_id, doc in self._get_es_docs_by_ids(uris)}
 
-    def get_relations(self, subj_obj_pairs):
+    def get_relations(self, subj_obj_pairs: List[Tuple[str, str]],
+                      filter_blacklisted=True) -> Dict[Tuple[str, str], List[str]]:
         """
         Retrieve the relations existing between subject-value pairs.
         :param subj_obj_pairs: list of subject-value (URI-literal) pairs
+        :param filter_blacklisted: remove blacklisted properties from results
         :return: a dict subj_obj_pair: [properties]
         """
 
@@ -123,9 +138,80 @@ class DBpediaWrapper:
             self._sparql.setQuery(query % query_values)
             for result in self._sparql.query().convert()["results"]["bindings"]:
                 key, value = (result['entity']['value'], result["value"]['value']), result["rel"]['value']
+                if filter_blacklisted and value in PROPERTIES_BLACKLIST:
+                    continue
                 if key not in results:
                     results[key] = []
                 results[key].append(value)
-
         return results
 
+    def get_types(self, uri):
+        """
+        Get the types of the given entity
+
+        :param uri: the entity URI
+        :return: a list of types (URIs)
+        """
+        doc = self._get_es_doc_by_id(uri)
+        if 'type' in doc:
+            return [t for t in doc['type'] if t not in TYPES_BLACKLIST]
+        return []
+
+    def get_descriptions(self, uri):
+        """
+        Get the descriptions of the given entity
+
+        :param uri: the entity URI
+        :return: a list of descriptions
+        """
+        doc = self._get_es_doc_by_id(uri)
+        if 'description' in doc:
+            return doc['description']
+        return []
+
+    @lru_cache
+    def get_subjects(self, prop: str, value: str) -> Dict[str, List[str]]:
+        """
+        Retrieve all the subject of triples <subject, prop, value>, along with their labels.
+        :param prop: the property URI
+        :param value: the value of the property
+        :return: a dict {uri: [labels]}
+        """
+        """
+        THE FOLLOWING QUERY CAUSES A TIMEOUT
+           "SELECT distinct ?subject (str(?label) as ?label)
+             WHERE {
+             { ?subject <%s> ?value . }
+             UNION
+             { ?subject <%s> [rdfs:label ?value] . }
+             ?subject rdfs:label ?label .
+             FILTER(lcase(str(?value))=lcase("%s"))
+             FILTER (langMatches(lang(?label), "EN") || langMatches(lang(?label), ""))
+           }" % (prop, prop, value)
+         REDUCE THE FULL SEARCH TO A SUBSET OF PREDEFINED VALUES
+         - value
+         - value.capitalize()
+         - value.lower()
+         - value.upper()
+         - value.title()
+        """
+        words_set = {value, value.lower(), value.upper(), value.capitalize(), value.title()}
+        words_set.update(["%s@en" % w for w in words_set])
+        query = """
+        SELECT distinct ?subject (str(?label) as ?label)
+        WHERE {
+          VALUES ?value {%s}
+          { ?subject <%s> ?value . }
+          UNION
+          { ?subject <%s> [rdfs:label ?value] . }
+          ?subject rdfs:label ?label .
+          FILTER (langMatches(lang(?label), "EN") || langMatches(lang(?label), ""))
+        }""" % (" ".join(['"%s"' % w for w in words_set]), prop, prop)
+        self._sparql.setQuery(query)
+        results = {}
+        for result in self._sparql.query().convert()["results"]["bindings"]:
+            subject, label = result["subject"]["value"], result["label"]["value"]
+            if subject not in results:
+                results[subject] = []
+            results[subject].append(label)
+        return results

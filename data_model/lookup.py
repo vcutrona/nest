@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import NamedTuple, List, Dict
+from typing import NamedTuple, List, Tuple
 from typing import Optional
 
 
 class SearchKey(NamedTuple):
     label: str
-    context: Dict[int, str]
+    context: Tuple[Tuple[int, str]]  # Dict and List are not hashable...
 
 
 class LookupResult(NamedTuple):

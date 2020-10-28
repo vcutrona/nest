@@ -55,12 +55,13 @@ class CandidateGenerator:
         """
         raise NotImplementedError
 
-    def multi_search(self, search_keys: Iterable[SearchKey]) -> List[GeneratorResult]:
+    def multi_search(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
         Parallel candidate retrieval execution
         :param search_keys: a list of search keys
         :return: a list of GeneratorResult
         """
+        # TODO the function should get a list of tables as input, not the list of search keys
         if self._threads > 1:
             results = functools.reduce(operator.iconcat,
                                        process_map(self._select_candidates,

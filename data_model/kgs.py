@@ -6,3 +6,4 @@ class DBpediaWrapperConfig:
     es_host: str = 'localhost'
     index: str = 'dbpedia'
     sparql_endpoint: str = 'http://dbpedia.org/sparql'
+    default_graph: str = 'http://dbpedia.org'
