@@ -1,122 +1,63 @@
-import csv
-import ast
-import pickle
-from ngram import NGram
-from utils.functions import chunk_list
-import sys
 import time
-import nltk
-from nltk.stem import PorterStemmer
-from nltk.corpus import stopwords
 import pandas as pd
 import networkx as nx
 from gensim.models import KeyedVectors
-from collections import defaultdict
+from ngram import NGram
 
 from factbase_lookup import sortTable, getLabelColumn
-from embeddings import etp, thinOut
+# from hybrid.factbase_lookup import sortTable, getLabelColumn
 
-base_dir = 'T2D_GoldStandard/'
+from embeddings import etp, thinOut, surfaceFormIndex_to_surfaceToEntities, save, load, \
+    generate_candidates, create_subset, disambiguate_entities, addEdges, normalizePriors, bestAnnotation, annotate
+"""from hybrid.embeddings import etp, thinOut, surfaceFormIndex_to_surfaceToEntities, save, load, \
+    generate_candidates, create_subset, disambiguate_entities, addEdges, normalizePriors, bestAnnotation, annotate"""
 
-target = base_dir + 'targets/T2D_embedding.csv'
-table = open(sortTable(target, 'table'), 'r', newline='')
-# annotated_table = table.copy()
-# w2v = KeyedVectors.load_word2vec_format(base_dir + 'dbpedia_embeddings-skipgram-300/embedding.txt', binary=False)
+# base_dir = '../hybrid/'
+base_dir = '/datahdd/gpuleri/'
+# datasets = '../datasets/T2D/targets/'
+datasets = '/datahdd/gpuleri/T2D/targets/'
+target = datasets + 'T2D_embedding.csv'
 
-porter = PorterStemmer()
-tokenizer = nltk.RegexpTokenizer(r"\w+")
-stop_words = set(stopwords.words('english'))
-tempDictCandidates = defaultdict(lambda: defaultdict(int))
-entity_candidates = {}
-annotation = {}
+start = time.time()
+table = pd.read_csv(sortTable(target, 'table'))  # get targets
+labelColumn = getLabelColumn(table)  # get labels
+annotated_table = table.copy()
+annotations = []
+#surfaceToEntities = surfaceFormIndex_to_surfaceToEntities(base_dir + 'surfaceFormIndex.csv')  # convert
 
-# converti surfaceFormIndex (csv) in labelToEntities (dict)
-"""with open(base_dir + 'surfaceFormIndex.csv', 'r', newline='', encoding='utf-8') as surface_form_index:
-    reader = csv.reader(surface_form_index, delimiter=' ')
-    next(reader)
+#save(surfaceToEntities, base_dir + 'surfaceToEntities.pickle')
+surfaceToEntities = load(base_dir + 'surfaceToEntities.pickle')
+print("LOAD")
+print(time.time() - start)
+#ng = NGram([surfaceForm for surfaceForm in surfaceToEntities.keys()])
+for labels in labelColumn:
+    # generate candidates
+    entity_candidates = generate_candidates(labels, surfaceToEntities, 0)  # ng
+    print("candidates")
+    print(time.time() - start)
 
-    tempCandidates = [[sf_form, entity, count] for entity, sf_forms, count in reader
-                      for sf_form in ast.literal_eval(sf_forms)]
-    print("1")
-    surface_form_index.close()
+    #save(entity_candidates, base_dir + 'candidates.pickle')
+    #entity_candidates = load(base_dir + 'candidates.pickle')
 
-for sf_form, entity, count in tempCandidates:
-    tempDictCandidates[sf_form][entity] = count
-tempCandidates = ['ne']  # void to release memory
-print("2")
-labelToEntities = {sf_form: {entity: count[entity] for entity in count}
-                   for sf_form, count in tempDictCandidates.items()}
-print("3")
-tempDictCandidates = {'a': 2} # void to release memory
-with open(base_dir + 'labelToEntities.pickle', 'wb') as file:
-    pickle.dump(labelToEntities, file, protocol=pickle.HIGHEST_PROTOCOL)
-    file.close()"""
+    # load embeddings and create disambiguation graph
+    subset = create_subset(entity_candidates,
+                           base_dir + 'dbpedia-embeddings-skipgram-300-filtered.txt',
+                           base_dir + 'dbpedia-embeddings-skipgram-300-subset.txt')
+    w2v = KeyedVectors.load_word2vec_format(subset, binary=False)
+    disambiguation_graph, entity_candidates = disambiguate_entities(entity_candidates, w2v)
 
+    # add edges on the graph
+    disambiguation_graph = addEdges(entity_candidates, disambiguation_graph, w2v)
 
+    # normalize priors
+    denominator = normalizePriors(entity_candidates)
 
-#carica labelToEntities
-with open(base_dir + 'labelToEntities.pickle', 'rb') as file:
-    labelToEntities = pickle.load(file)
-    file.close()
+    # normalizza prob a priori
+    personalization = {node: prop['weight'] / denominator[surface_form] for surface_form in entity_candidates
+                       for (node, prop) in entity_candidates.get(surface_form).nodes(data=True)
+                       if denominator[surface_form] != 0}
 
-#sottoinsieme di labelToEntities
-"""labelToEnt = {}
-count = 0
-for k, x in labelToEntities.items():
-    count += 1
-    if count <= 1000000:
-        labelToEnt[k] = x
-    else:
-        break
-labelToEntities = labelToEnt"""
-
-#recupera labels e crea modello ngram
-labelColumn = getLabelColumn(table)
-flat_list = [d for d in labelToEntities.keys()]
-ng = NGram(flat_list)
-
-for row in range(len(labelColumn)):
-    disambiguation_graph = nx.Graph()
-    # genera candidati
-    with open('candidates.csv', 'w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file, delimiter=' ', quoting=csv.QUOTE_ALL)
-        for label in labelColumn[row]:
-            graph = nx.DiGraph()
-            candidates = []
-            inner = time.time()
-            if label in labelToEntities:
-                candidates = [entity for entity in labelToEntities[label]]
-            """else: #se non c'è exact matching con label
-                word_tokens = tokenizer.tokenize(label.lower())
-                word_tokens = [porter.stem(word) for word in word_tokens] #stemming
-                labelMod = [word for word in word_tokens if word not in stop_words] #stopwords
-                labelMod = " ".join(labelMod)
-                listSF = [word for (word, sim) in ng.search(labelMod, 0.82)] #trigram sim.
-                candidates = [entity for sf_form in listSF for entity in labelToEntities[sf_form]]"""
-            writer.writerow([{label: candidates}])
-        file.close()
-
-        graph.add_nodes_from(candidates)
-        entity_candidates[label] = graph
-
-    # crea grafo disambiguazione
-    for surface_form in entity_candidates:
-        disambiguation_graph = nx.compose(disambiguation_graph, entity_candidates.get(surface_form))
-    # crea archi nel grafo
-    for surface_form in entity_candidates:
-        for v1 in entity_candidates.get(surface_form):
-            for v2 in (set(disambiguation_graph.nodes()) - set(entity_candidates.get(surface_form))):
-                disambiguation_graph.add_weighted_edges_from([(v1, v2, abs(w2v.similarity(v1, v2)))])
-
-    denominator = {}
-    for label in entity_candidates:
-        denominator[label] = 0
-        for (node, prop) in entity_candidates.get(label).nodes(data=True):
-            denominator[label] += prop['weight']
-
-    personalization = {node: prop['weight'] / denominator[label] for label in entity_candidates
-                       for (node, prop) in entity_candidates.get(label).nodes(data=True)}
-    # calcola denominatore
+    # calcola denominatore per cos similarity
     """denominator = {}
     for v1 in disambiguation_graph.nodes():
         denominator[v1] = 0
@@ -134,13 +75,13 @@ for row in range(len(labelColumn)):
     # thin out 25% of edges
     disambiguation_graph.remove_edges_from(thinOut(disambiguation_graph))
 
-    #pagerank
-    pageRank = nx.pagerank(disambiguation_graph, max_iter=50, alpha=0.9, personalization=personalization)
+    # pagerank
+    pageRank = nx.pagerank(disambiguation_graph, tol=1e-05, max_iter=50, alpha=0.9, personalization=personalization)
 
-    # pick the best candidate for each surface form
-    for surface_form in entity_candidates:
-        best = -1
-        for v in entity_candidates.get(surface_form):
-            if pageRank[v] > best:
-                best = pageRank[v]
-                annotation[surface_form] = v
+    # pick the best candidate for each surface form and save all of them
+    annotations += list(bestAnnotation(entity_candidates, pageRank))
+    print("ANNOTATE")
+    print(time.time() - start)
+
+annotated_table["entity"] = annotations
+annotate(annotated_table, base_dir + 'annotations.csv')
