@@ -8,7 +8,7 @@ from data_model.lookup import SearchKey
 
 @dataclass
 class CandidateGeneratorConfig:
-    max_subseq_len: Optional[int]
+    max_subseq_len: int
 
     def config_str(self) -> str:
         return "max_subseq_len=%s" % str(self.max_subseq_len)

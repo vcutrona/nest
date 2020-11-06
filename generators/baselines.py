@@ -16,11 +16,11 @@ class LookupGenerator(CandidateGenerator):
     """
     A generator that just forwards lookup results.
     """
-    def __init__(self, lookup_service: LookupService, config=CandidateGeneratorConfig(5),
+    def __init__(self, lookup_service: LookupService, config=CandidateGeneratorConfig(0),
                  threads=mp.cpu_count(), chunk_size=5000):
         super().__init__(lookup_service, config, threads, chunk_size)
 
-    def _select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
         Candidate selection method. This implementation just forwards the LookupService results.
         :param search_keys: a list of SearchKeys to use for the candidate retrieval
@@ -147,7 +147,7 @@ class FactBase(CandidateGenerator):
 
         return [c[0] for c in sorted(candidates, key=lambda s: s[1])] # sort by edit distance
 
-    def _select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
         Candidate selection method that implements the Efthymiou's FactBase lookup.
         :param search_keys: a list of SearchKeys to use for the candidate retrieval

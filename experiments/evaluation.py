@@ -1,10 +1,8 @@
-import os
-import pickle
 from typing import List, Tuple
 
-from data_model.dataset import Entity, GTTable, Table
+from annotators import CEAAnnotator
+from data_model.dataset import GTTable, Table
 from datasets import CEADatasetEnum
-from generators import CandidateGenerator
 
 
 class CEAEvaluator:
@@ -12,8 +10,8 @@ class CEAEvaluator:
     A class to test generator algorithms on a dataset.
     """
 
-    def __init__(self, generator: CandidateGenerator):
-        self._generator = generator
+    def __init__(self, annotator: CEAAnnotator):
+        self._annotator = annotator
 
     @staticmethod
     def precision_score(correct_cells, annotated_cells):
@@ -48,30 +46,30 @@ class CEAEvaluator:
         """
         return (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
-    def annotate_dataset(self, dataset: CEADatasetEnum):
-        print('Processing %s_%s (%s) on %s' % (*self._generator.id, dataset.name))
-        targets = dataset.get_targets()
-        # TODO parallelize
-        for table in dataset.get_tables():
-            if table.tab_id in targets:
-                target_cells = targets[table.tab_id]
-                filename = os.path.join(
-                    os.path.dirname(__file__),
-                    'candidates',
-                    '%s_%s_%s_%s_%s.pkl' % (*self._generator.id, dataset.name, table.tab_id))
-                # check existing results
-                if not os.path.isfile(filename):
-                    # keep the cell-search_key pair -> results may be shuffled!
-                    search_key_cell_dict = {table.get_search_key(cell_): cell_ for cell_ in target_cells}
-                    results = self._generator.multi_search(list(search_key_cell_dict.keys()))
-
-                    for search_key, candidates in results:
-                        if candidates:
-                            table.annotate_cell(search_key_cell_dict[search_key], Entity(candidates[0]))
-
-                    pickle.dump(table, open(filename, 'wb'))
-
-                yield pickle.load(open(filename, 'rb'))
+    # def annotate_dataset(self, dataset: CEADatasetEnum):
+    #     print('Processing %s_%s (%s) on %s' % (*self._generator.id, dataset.name))
+    #     targets = dataset.get_targets()
+    #     # TODO parallelize
+    #     for table in dataset.get_tables():
+    #         if table.tab_id in targets:
+    #             target_cells = targets[table.tab_id]
+    #             filename = os.path.join(
+    #                 os.path.dirname(__file__),
+    #                 'candidates',
+    #                 '%s_%s_%s_%s_%s.pkl' % (*self._generator.id, dataset.name, table.tab_id))
+    #             # check existing results
+    #             if not os.path.isfile(filename):
+    #                 # keep the cell-search_key pair -> results may be shuffled!
+    #                 search_key_cell_dict = {table.get_search_key(cell_): cell_ for cell_ in target_cells}
+    #                 results = self._generator.multi_search(list(search_key_cell_dict.keys()))
+    #
+    #                 for search_key, candidates in results:
+    #                     if candidates:
+    #                         table.annotate_cell(search_key_cell_dict[search_key], Entity(candidates[0]))
+    #
+    #                 pickle.dump(table, open(filename, 'wb'))
+    #
+    #             yield pickle.load(open(filename, 'rb'))
 
     # def _get_candidates_df(self, gt):
     #     """
@@ -235,13 +233,13 @@ class CEAEvaluator:
         """
         Compute Precision, Recall and F1 measures.
         :param datasets: the list of testing datasets on which to test the generator
-        :return: a dictionary Dict(generator, results), where results is a dict which contains scores grouped
+        :return: a dictionary Dict(generator_id, results), where results is a dict which contains scores grouped
                  by tables categories.
         """
         results = {}
         for dataset in datasets:
             tables = {gt_table.tab_id: (gt_table, ) for gt_table in dataset.get_gt_tables()}
-            for table in self.annotate_dataset(dataset):
+            for table in self._annotator.annotate_dataset(dataset):
                 tables[table.tab_id] += (table, )
 
             tables_categories = dataset.get_table_categories()
@@ -251,13 +249,13 @@ class CEAEvaluator:
                 results[dataset.name][cat] = self._get_scores(
                     [tables[tab_id] for tab_id in tables if self._is_table_in_cat(tab_id, include, exclude)])
 
-        return {"%s_%s (%s)" % self._generator.id: results}
+        return {"%s_%s (%s)" % self._annotator.generator_id: results}
 
     def score_all(self, exclude=None):
         """
         Helper method to test all the datasets available in the benchmark, excluding some of them.
         :param exclude: list of datasets to exclude from the evaluation
-        :return: a dictionary Dict(generator, results), where results is a dict which contains scores grouped
+        :return: a dictionary Dict(generator_id, results), where results is a dict which contains scores grouped
                  by tables categories.
         """
         if exclude is None:
@@ -267,7 +265,7 @@ class CEAEvaluator:
     def score(self, gt):
         """
         Helper method to test a single dataset of the benchmark.
-        :return: a dictionary Dict(generator, results), where results is a dict which contains scores grouped
+        :return: a dictionary Dict(generator_id, results), where results is a dict which contains scores grouped
                  by tables categories.
         """
         return self._score([gt])

@@ -1,7 +1,7 @@
 import functools
 import operator
 import os
-from typing import List, Tuple, Union, Iterable
+from typing import List, Tuple, Union
 
 import numpy as np
 from diskcache import Cache
@@ -11,9 +11,9 @@ from tqdm.contrib.concurrent import process_map
 from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, \
     CandidateEmbeddings, GeneratorResult, Embedding
 from data_model.lookup import SearchKey
-from utils.kgs import DBpediaWrapper
 from lookup import LookupService
 from utils.functions import chunk_list, weighting_by_ranking, truncate_string
+from utils.kgs import DBpediaWrapper
 
 
 class CandidateGenerator:
@@ -47,7 +47,7 @@ class CandidateGenerator:
             lookup_results = dict(self._lookup_service.lookup(labels))
         return [GeneratorResult(search_key, lookup_results[search_key.label]) for search_key in search_keys]
 
-    def _select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
         Candidate selection method. To be implement in all the subclasses.
         :param search_keys: a list of SearchKeys to use for the candidate retrieval
@@ -55,34 +55,34 @@ class CandidateGenerator:
         """
         raise NotImplementedError
 
-    def multi_search(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
-        """
-        Parallel candidate retrieval execution
-        :param search_keys: a list of search keys
-        :return: a list of GeneratorResult
-        """
-        # TODO the function should get a list of tables as input, not the list of search keys
-        if self._threads > 1:
-            results = functools.reduce(operator.iconcat,
-                                       process_map(self._select_candidates,
-                                                   list(chunk_list(search_keys, self._chunk_size)),
-                                                   max_workers=self._threads),
-                                       [])
-
-        else:  # avoid CUDA re-initialization in forked subprocess
-            results = []
-            for search_keys_chunk in tqdm(chunk_list(search_keys, self._chunk_size)):
-                results += self._select_candidates(search_keys_chunk)
-
-        return results
-
-    def search(self, search_key: SearchKey) -> List[GeneratorResult]:
-        """
-        Commodity method to perform a single query
-        :param search_key: a search key
-        :return: a list of GeneratorResult
-        """
-        return self.multi_search([search_key])
+    # def multi_search(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    #     """
+    #     Parallel candidate retrieval execution
+    #     :param search_keys: a list of search keys
+    #     :return: a list of GeneratorResult
+    #     """
+    #     # TODO the function should get a list of tables as input, not the list of search keys
+    #     if self._threads > 1:
+    #         results = functools.reduce(operator.iconcat,
+    #                                    process_map(self.select_candidates,
+    #                                                list(chunk_list(search_keys, self._chunk_size)),
+    #                                                max_workers=self._threads),
+    #                                    [])
+    #
+    #     else:  # avoid CUDA re-initialization in forked subprocess
+    #         results = []
+    #         for search_keys_chunk in tqdm(chunk_list(search_keys, self._chunk_size)):
+    #             results += self.select_candidates(search_keys_chunk)
+    #
+    #     return results
+    #
+    # def search(self, search_key: SearchKey) -> List[GeneratorResult]:
+    #     """
+    #     Commodity method to perform a single query
+    #     :param search_key: a search key
+    #     :return: a list of GeneratorResult
+    #     """
+    #     return self.multi_search([search_key])
 
 
 class EmbeddingCandidateGenerator(CandidateGenerator):
@@ -148,7 +148,7 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
 
         return cached_entries, to_compute
 
-    def _select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
         Return a list of candidates, sorted by the cosine distance between their label and context embeddings.
         :param search_keys: a list of SearchKey to search

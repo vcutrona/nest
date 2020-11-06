@@ -109,6 +109,7 @@ class CEADatasetEnum(Enum):
         return {k: [Cell(*pair) for pair in zip(v['row_id'], v['col_id'])] for k, v in target.groupby('tab_id')}
 
     def get_tables(self):
+        # TODO add target from here?
         with os.scandir(f"{os.path.dirname(__file__)}/{self.value}/tables") as it:
             for entry in it:
                 if entry.name.endswith(".csv"):

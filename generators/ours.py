@@ -18,7 +18,7 @@ class FastElmo(EmbeddingCandidateGenerator):
     """
 
     def __init__(self, lookup_service: LookupService,
-                 config=EmbeddingCandidateGeneratorConfig(max_subseq_len=5,
+                 config=EmbeddingCandidateGeneratorConfig(max_subseq_len=0,
                                                           abstract='short',
                                                           abstract_max_tokens=15)):
         super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
@@ -83,7 +83,7 @@ class FastBert(EmbeddingCandidateGenerator):
     """
 
     def __init__(self, lookup_service: LookupService,
-                 config: FastBertConfig = FastBertConfig(max_subseq_len=5, abstract='short', abstract_max_tokens=512)):
+                 config: FastBertConfig = FastBertConfig(max_subseq_len=0, abstract='short', abstract_max_tokens=512)):
         super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
         self._model = SentenceTransformer('bert-base-nli-mean-tokens')
 
@@ -93,7 +93,7 @@ class FastBert(EmbeddingCandidateGenerator):
         :param search_keys: the list of SearchKey to embed
         :return: a list of embeddings
         """
-        sentences = ["%s %s" % (search_key.label, simplify_string([x[1] for x in search_key.context]))
+        sentences = ["%s %s" % (search_key.label, simplify_string(" ".join([x[1] for x in search_key.context])))
                      for search_key in search_keys]
         if self._config.strategy == 'sentence':
             return [Embedding(search_key, embedding)
