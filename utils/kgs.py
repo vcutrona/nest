@@ -1,6 +1,8 @@
+from enum import Enum
 from functools import lru_cache
 from typing import Dict, Tuple, List
 
+import requests
 from SPARQLWrapper import SPARQLWrapper, JSON
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
@@ -215,3 +217,18 @@ class DBpediaWrapper:
                 results[subject] = []
             results[subject].append(label)
         return results
+
+
+class KGEmbedding(Enum):
+    RDF2VEC = 'http://localhost:5999/r2v/uniform'
+    WORD2VEC = 'http://localhost:5998/w2v/dbp-300'
+
+    def get_vectors(self, uris):
+        """
+        Get vectors for the given URIs
+        :param uris: a DBpedia resource URI, or a list of DBpedia resource URIs
+        :return: a dict {<uri>: <vec>}. <vec> is None if it does not exist a vector for <uri>.
+        """
+        data = {'uri': uris}
+        response = requests.get(self.value, params=data)
+        return response.json()
