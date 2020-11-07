@@ -3,7 +3,7 @@ from enum import Enum
 
 import pandas as pd
 
-from data_model.dataset import Table, GTTable, Cell
+from data_model.dataset import Table, GTTable, Cell, Column, ColumnRelation
 
 TT_CATEGORIES = {'ALL': ([], []),
                  'CTRL_WIKI': (['WIKI'], ['NOISE2']),
@@ -91,7 +91,7 @@ TT_CATEGORIES = {'ALL': ([], []),
 #         return list(tmp)[0]
 
 
-class CEADatasetEnum(Enum):
+class DatasetEnum(Enum):
     """
     Enumerate the datasets available in the benchmark
     """
@@ -102,11 +102,39 @@ class CEADatasetEnum(Enum):
     TT = '2T'
     T2D = 'T2D'
 
-    def get_targets(self):
-        target = pd.read_csv(f"{os.path.dirname(__file__)}/{self.value}/targets/CEA_{self.value}_Targets.csv",
+    def _target_path(self, task):
+        return f"{os.path.dirname(__file__)}/{self.value}/targets/{task}_{self.value}_Targets.csv"
+
+    def _gt_path(self, task):
+        return f"{os.path.dirname(__file__)}/{self.value}/gt/{task}_{self.value}_gt.csv"
+
+    def get_target_cells(self):
+        if not os.path.exists(self._target_path('CEA')):
+            return {}
+
+        target = pd.read_csv(self._target_path('CEA'),
                              names=['tab_id', 'col_id', 'row_id'],
                              dtype={'tab_id': str, 'col_id': int, 'row_id': int})
         return {k: [Cell(*pair) for pair in zip(v['row_id'], v['col_id'])] for k, v in target.groupby('tab_id')}
+
+    def get_target_columns(self):
+        if not os.path.exists(self._target_path('CTA')):
+            return {}
+
+        target = pd.read_csv(self._target_path('CTA'),
+                             names=['tab_id', 'col_id'],
+                             dtype={'tab_id': str, 'col_id': int})
+        return {k: [Column(col_id) for col_id in v['col_id']] for k, v in target.groupby('tab_id')}
+
+    def get_target_column_relations(self):
+        if not os.path.exists(self._target_path('CPA')):
+            return {}
+
+        target = pd.read_csv(self._target_path('CPA'),
+                             names=['tab_id', 'source_id', 'target_id'],
+                             dtype={'tab_id': str, 'source_id': int, 'target_id': int})
+        return {k: [ColumnRelation(*pair) for pair in zip(v['source_id'], v['target_id'])]
+                for k, v in target.groupby('tab_id')}
 
     def get_tables(self):
         # TODO add target from here?
@@ -116,14 +144,38 @@ class CEADatasetEnum(Enum):
                     yield Table(os.path.splitext(entry.name)[0], entry.path)
 
     def get_gt_tables(self):
-        gt = pd.read_csv(f"{os.path.dirname(__file__)}/{self.value}/gt/CEA_{self.value}_gt.csv",
-                         names=['tab_id', 'col_id', 'row_id', 'entities'],
-                         dtype={'tab_id': str, 'col_id': int, 'row_id': int, 'entities': str})
-        gt['entities'] = gt['entities'].apply(str.split)
-        groups = gt.groupby('tab_id')
-        for tab_id, group in groups:
+        cea = pd.read_csv(self._gt_path('CEA'),
+                          names=['tab_id', 'col_id', 'row_id', 'entities'],
+                          dtype={'tab_id': str, 'col_id': int, 'row_id': int, 'entities': str})
+        cea['entities'] = cea['entities'].apply(str.split)
+        cta_groups = None
+        if os.path.exists(self._gt_path('CTA')):
+            cta = pd.read_csv(self._gt_path('CTA'),
+                              names=['tab_id', 'col_id', 'types'],
+                              dtype={'tab_id': str, 'col_id': int, 'types': str})
+            cta['types'] = cta['types'].apply(str.split)
+            cta_groups = cta.groupby('tab_id')
+        cpa_groups = None
+        if os.path.exists(self._gt_path('CPA')):
+            cpa = pd.read_csv(f"{os.path.dirname(__file__)}/{self.value}/gt/CPA_{self.value}_gt.csv",
+                              names=['tab_id', 'source_id', 'target_id', 'properties'],
+                              dtype={'tab_id': str, 'source_id': int, 'target_id': int, 'properties': str})
+            cpa['properties'] = cpa['properties'].apply(str.split)
+            cpa_groups = cpa.groupby('tab_id')
+
+        cea_groups = cea.groupby('tab_id')
+        for tab_id, cea_group in cea_groups:
             gt_table = GTTable(tab_id)
-            gt_table.set_cell_annotations(zip(group['row_id'], group['col_id'], group['entities']))
+            gt_table.set_cell_annotations(zip(cea_group['row_id'], cea_group['col_id'], cea_group['entities']))
+            if cta_groups and tab_id in cta_groups.groups:
+                cta_group = cta_groups.get_group(tab_id)
+                gt_table.set_column_annotations(zip(cta_group['col_id'], cta_group['types']))
+            if cpa_groups and tab_id in cpa_groups.groups:
+                cpa_group = cpa_groups.get_group(tab_id)
+                gt_table.set_property_annotations(zip(cpa_group['source_id'],
+                                                      cpa_group['target_id'],
+                                                      cpa_group['properties']))
+
             yield gt_table
 
     # def get_df(self):

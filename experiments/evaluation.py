@@ -2,7 +2,7 @@ from typing import List, Tuple
 
 from annotators import CEAAnnotator
 from data_model.dataset import GTTable, Table
-from datasets import CEADatasetEnum
+from datasets import DatasetEnum
 
 
 class CEAEvaluator:
@@ -46,7 +46,7 @@ class CEAEvaluator:
         """
         return (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
-    # def annotate_dataset(self, dataset: CEADatasetEnum):
+    # def annotate_dataset(self, dataset: DatasetEnum):
     #     print('Processing %s_%s (%s) on %s' % (*self._generator.id, dataset.name))
     #     targets = dataset.get_targets()
     #     # TODO parallelize
@@ -260,7 +260,7 @@ class CEAEvaluator:
         """
         if exclude is None:
             exclude = []
-        return self._score(filter(lambda x: x not in exclude, CEADatasetEnum))
+        return self._score(filter(lambda x: x not in exclude, DatasetEnum))
 
     def score(self, gt):
         """

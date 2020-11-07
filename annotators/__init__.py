@@ -9,7 +9,7 @@ from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
 from data_model.dataset import Table, Cell, Entity
-from datasets import CEADatasetEnum
+from datasets import DatasetEnum
 from generators import CandidateGenerator, EmbeddingCandidateGenerator
 from utils.functions import chunk_list
 
@@ -42,6 +42,7 @@ class CEAAnnotator:
         search_key_cell_dict = {table.get_search_key(cell_): cell_ for cell_ in target_cells}
 
         # Parallelize: if there are many cells, annotate chunks of cells (like mini-tables)
+        # TODO delegate parallelization to Generators
         if self._micro_table_size > 0:
             # print("Parallel", table, len(target_cells))
             results = functools.reduce(operator.iconcat,
@@ -63,7 +64,7 @@ class CEAAnnotator:
 
         return table
 
-    def annotate_dataset(self, dataset: CEADatasetEnum, n: int = None):
+    def annotate_dataset(self, dataset: DatasetEnum, n: int = None):
         """
         Annotate tables of a given CEA dataset.
         :param dataset: CEA dataset to annotate
@@ -71,7 +72,7 @@ class CEAAnnotator:
 
         :return:
         """
-        targets = dataset.get_targets()
+        targets = dataset.get_target_cells()
         tables = []
         tables_filenames = []
         target_cells = []

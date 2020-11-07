@@ -1,11 +1,13 @@
 import json
 
-from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, FastBertConfig
+from annotators import CEAAnnotator
+from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, FastBertConfig, \
+    FactBaseConfig
 from data_model.lookup import ESLookupConfig
 from experiments.evaluation import CEAEvaluator
-from generators.baselines import LookupGenerator
+from generators.baselines import LookupGenerator, FactBase
 from generators.ours import FastBert
-from datasets import CEADatasetEnum
+from datasets import DatasetEnum
 from lookup.services import WikipediaSearch, ESLookup, DBLookup
 
 generators = {
@@ -91,7 +93,10 @@ generators = {
 res = []
 for generator, configs in generators.items():
     for config in configs:
-        evaluator = CEAEvaluator(generator(config['lookup'][0](**config['lookup'][1]), **config['args']))
+        lookup_ = config['lookup'][0](**config['lookup'][1])
+        generator_ = generator(lookup_, **config['args'])
+        annotator_ = CEAAnnotator(generator_)
+        evaluator = CEAEvaluator(annotator_)
         res.append(evaluator.score_all())
 
 with open('experiments_results.json', 'w', encoding='utf-8') as f:
