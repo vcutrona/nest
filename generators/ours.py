@@ -21,7 +21,7 @@ class FastElmo(EmbeddingCandidateGenerator):
                  config=EmbeddingCandidateGeneratorConfig(max_subseq_len=0,
                                                           abstract='short',
                                                           abstract_max_tokens=15)):
-        super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
+        super().__init__(lookup_service, config)  # , threads=1, chunk_size=10000)  # force single-process execution
         self._model = ElmoEmbedder(cuda_device=0,
                                    weight_file=os.path.join(os.path.dirname(__file__),
                                                             'elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5'),
@@ -84,7 +84,7 @@ class FastBert(EmbeddingCandidateGenerator):
 
     def __init__(self, lookup_service: LookupService,
                  config: FastBertConfig = FastBertConfig(max_subseq_len=0, abstract='short', abstract_max_tokens=512)):
-        super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # force single-process execution
+        super().__init__(lookup_service, config)  #, threads=1, chunk_size=10000)  # force single-process execution
         self._model = SentenceTransformer('bert-base-nli-mean-tokens')
 
     def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[Embedding]:

@@ -1,7 +1,7 @@
 from typing import List, Tuple
 
 from annotators import CEAAnnotator
-from data_model.dataset import GTTable, Table
+from data_model.dataset import Table
 from datasets import DatasetEnum
 
 
@@ -101,7 +101,7 @@ class CEAEvaluator:
     #         dataset.to_csv(filename, quoting=csv.QUOTE_ALL, index=False)
     #     return dataset
 
-    def _get_scores(self, tables: List[Tuple[GTTable, Table]]):
+    def _get_scores(self, tables: List[Table]):
         """
         Code adapted from SemTab 2019
         Notes:
@@ -116,8 +116,9 @@ class CEAEvaluator:
 
         gt_cell_ent, correct_cells, annotated_cells = list(), list(), list()
 
-        for gt_table, table in tables:
-            gt_table_ann = gt_table.cell_annotations
+        for table in tables:
+            print(table.tab_id)
+            gt_table_ann = table.gt_cell_annotations
             table_ann = table.cell_annotations
             gt_cell_ent += list(gt_table_ann)
             annotated_cells += list(table_ann)
@@ -238,16 +239,14 @@ class CEAEvaluator:
         """
         results = {}
         for dataset in datasets:
-            tables = {gt_table.tab_id: (gt_table, ) for gt_table in dataset.get_gt_tables()}
-            for table in self._annotator.annotate_dataset(dataset):
-                tables[table.tab_id] += (table, )
+            ann_tables = self._annotator.annotate_dataset(dataset)
 
             tables_categories = dataset.get_table_categories()
             results[dataset.name] = {}
             for cat in tables_categories:
                 include, exclude = tables_categories[cat]
                 results[dataset.name][cat] = self._get_scores(
-                    [tables[tab_id] for tab_id in tables if self._is_table_in_cat(tab_id, include, exclude)])
+                    [table for table in ann_tables if self._is_table_in_cat(table.tab_id, include, exclude)])
 
         return {"%s_%s (%s)" % self._annotator.generator_id: results}
 

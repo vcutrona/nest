@@ -5,14 +5,13 @@ from typing import List, Tuple, Union
 
 import numpy as np
 from diskcache import Cache
-from tqdm import tqdm
-from tqdm.contrib.concurrent import process_map
 
+from data_model.dataset import Table
 from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, \
     CandidateEmbeddings, GeneratorResult, Embedding
 from data_model.lookup import SearchKey
 from lookup import LookupService
-from utils.functions import chunk_list, weighting_by_ranking, truncate_string
+from utils.functions import weighting_by_ranking, truncate_string
 from utils.kgs import DBpediaWrapper
 
 
@@ -21,13 +20,13 @@ class CandidateGenerator:
     Abstract Candidate Generator.
     """
 
-    def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig, threads, chunk_size):
-        assert threads > 0
-        self._threads = threads
-        self._chunk_size = chunk_size
+    def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig):  #, threads, chunk_size):
+        # assert threads > 0
+        # self._threads = threads
+        # self._chunk_size = chunk_size
 
-        self._config = config
         self._lookup_service = lookup_service
+        self._config = config
 
     @property
     def id(self):
@@ -47,10 +46,10 @@ class CandidateGenerator:
             lookup_results = dict(self._lookup_service.lookup(labels))
         return [GeneratorResult(search_key, lookup_results[search_key.label]) for search_key in search_keys]
 
-    def select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
         """
         Candidate selection method. To be implement in all the subclasses.
-        :param search_keys: a list of SearchKeys to use for the candidate retrieval
+        :param table: a Table object
         :return: a list of GeneratorResult
         """
         raise NotImplementedError
@@ -85,6 +84,13 @@ class CandidateGenerator:
     #     return self.multi_search([search_key])
 
 
+# class ParallelCandidateGenerator(CandidateGenerator, ABC):
+#     def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig, threads, chunk_size):
+#         super().__init__(lookup_service, config)
+#         self._threads = threads
+#         self._chunk_size = chunk_size
+
+
 class EmbeddingCandidateGenerator(CandidateGenerator):
     """
     Abstract generator that re-rank candidates accordingly with vector similarities
@@ -92,8 +98,8 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
     the cosine distance measure.
     """
 
-    def __init__(self, lookup_service: LookupService, config: EmbeddingCandidateGeneratorConfig, threads, chunk_size):
-        super().__init__(lookup_service, config, threads, chunk_size)
+    def __init__(self, lookup_service: LookupService, config: EmbeddingCandidateGeneratorConfig):  #, threads, chunk_size):
+        super().__init__(lookup_service, config)  #, threads, chunk_size)
 
         self._abstract_helper = DBpediaWrapper()
         self._cache = Cache(
@@ -148,12 +154,13 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
 
         return cached_entries, to_compute
 
-    def select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
         """
         Return a list of candidates, sorted by the cosine distance between their label and context embeddings.
-        :param search_keys: a list of SearchKey to search
+        :param table: a Table object
         :return: a list of GeneratorResult
         """
+        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))  # collect lookup result from the super class
 
         # create embed for each label and context pair

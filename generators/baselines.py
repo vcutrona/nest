@@ -1,11 +1,10 @@
-import multiprocessing as mp
 from collections import Counter
 from typing import List, Iterable, Tuple, Any, Dict
 
 from nltk import edit_distance
 
+from data_model.dataset import Table
 from data_model.generator import GeneratorResult, CandidateGeneratorConfig, FactBaseConfig
-from data_model.lookup import SearchKey
 from generators import CandidateGenerator
 from lookup import LookupService
 from utils.functions import tokenize, simplify_string, first_sentence
@@ -16,49 +15,23 @@ class LookupGenerator(CandidateGenerator):
     """
     A generator that just forwards lookup results.
     """
-    def __init__(self, lookup_service: LookupService, config=CandidateGeneratorConfig(0),
-                 threads=mp.cpu_count(), chunk_size=5000):
-        super().__init__(lookup_service, config, threads, chunk_size)
+    def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig = CandidateGeneratorConfig(0)):
+        super().__init__(lookup_service, config)
 
-    def select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
         """
         Candidate selection method. This implementation just forwards the LookupService results.
-        :param search_keys: a list of SearchKeys to use for the candidate retrieval
+        :param table: a Table object
         :return: a list of GeneratorResult
         """
+        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         return self._lookup_candidates(search_keys)
 
 
 class FactBase(CandidateGenerator):
     def __init__(self, lookup_service: LookupService, config: FactBaseConfig = FactBaseConfig(0)):
-        super().__init__(lookup_service, config, threads=1, chunk_size=10000)  # do not split samples in chunks!
+        super().__init__(lookup_service, config)
         self._dbp = DBpediaWrapper()
-        # self._cache = Cache(
-        #     os.path.join(
-        #         os.path.dirname(__file__),
-        #         '.cache',
-        #         self.__class__.__name__,
-        #         self._config.cache_dir()),
-        #     size_limit=int(8e9))
-
-    # def _get_cached_entries(self, keys: List[SearchKey]) -> Tuple[List[GeneratorResult],
-    #                                                               List[SearchKey]]:
-    #     """
-    #     Retrieve already computed results from cache
-    #     :param keys: a list of keys to retrieve
-    #     :return: a tuple (<cached results>, <labels to embed>)
-    #     """
-    #     to_compute = []
-    #     cached_entries = []
-    #
-    #     for key in keys:
-    #         entry = self._cache.get(key)
-    #         if entry is None:
-    #             to_compute.append(key)
-    #         else:
-    #             cached_entries.append(entry)
-    #
-    #     return cached_entries, to_compute
 
     def _get_description_tokens(self, uri: str) -> List[str]:
         """
@@ -145,18 +118,17 @@ class FactBase(CandidateGenerator):
             if scores:
                 candidates.append(scores[0])  # keep the best label for each candidate
 
-        return [c[0] for c in sorted(candidates, key=lambda s: s[1])] # sort by edit distance
+        return [c[0] for c in sorted(candidates, key=lambda s: s[1])]  # sort by edit distance
 
-    def select_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
         """
         Candidate selection method that implements the Efthymiou's FactBase lookup.
-        :param search_keys: a list of SearchKeys to use for the candidate retrieval
+        :param table: a Table object
         :return: a list of GeneratorResult
         """
 
         # Get candidates for each label
-        # lr = self._lookup_candidates(search_keys)
-        # print(lr)
+        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
         generator_results = {}
 
