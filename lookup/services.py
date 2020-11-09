@@ -105,7 +105,7 @@ class DBLookup(LookupService):
     DBpediaLookup lookup service.
     """
 
-    def __init__(self, config: DBLookupConfig = DBLookupConfig('http://lookup.dbpedia.org/api/search/KeywordSearch')):
+    def __init__(self, config: DBLookupConfig = DBLookupConfig('http://lookup.dbpedia.org/api/search')):
         super().__init__(config)
         self._session = requests.Session()
 
@@ -117,11 +117,11 @@ class DBLookup(LookupService):
         """
         for label in labels:
             params = {
-                "QueryString": label,
-                "MaxHits": self._config.max_hits
+                "query": label,
+                "maxResults": self._config.max_hits,
+                "format": 'json'
             }
-            yield label, ElementTree.XML(
-                self._session.get(url=self._config.url, params=params).content).findall('Result')
+            yield label, self._session.get(url=self._config.url, params=params).json()
 
     def _lookup(self, labels) -> [LookupResult]:
         """
@@ -129,5 +129,5 @@ class DBLookup(LookupService):
         :param labels: a list of labels
         :return: a list of LookupResult
         """
-        return [LookupResult(short_label, [result.find('URI').text for result in results])
-                for short_label, results in self._get_db_docs(labels)]
+        return [LookupResult(short_label, [res for doc in result['docs'] for res in doc['resource']])
+                for short_label, result in self._get_db_docs(labels)]
