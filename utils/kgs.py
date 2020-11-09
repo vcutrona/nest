@@ -71,7 +71,7 @@ class DBpediaWrapper:
             self._sparql.setQuery("""
                     SELECT distinct ?label
                     WHERE {
-                      %s rdfs:label ?label . 
+                      <%s> rdfs:label ?label . 
                     FILTER (langMatches(lang(?label), "EN") || langMatches(lang(?label), "")) }
                     """ % uri)
 
