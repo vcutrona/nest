@@ -118,12 +118,12 @@ class CEAEvaluator:
 
         for table in tables:
             gt_table_ann = table.gt_cell_annotations
-            table_ann = table.cell_annotations
             gt_cell_ent += list(gt_table_ann)
-            annotated_cells += list(table_ann)
-            for cell, cell_annotation in table_ann.items():
-                if cell in gt_table_ann and cell_annotation == gt_table_ann[cell]:
-                    correct_cells.append(cell)
+            for cell, cell_annotation in table.cell_annotations.items():
+                if cell in gt_table_ann:
+                    annotated_cells.append(cell)
+                    if cell_annotation == gt_table_ann[cell]:
+                        correct_cells.append(cell)
 
         precision = self.precision_score(correct_cells, annotated_cells)
         recall = self.recall_score(correct_cells, gt_cell_ent)

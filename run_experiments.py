@@ -29,6 +29,10 @@ generators = {
             'lookup': (ESLookup, {'config': ESLookupConfig('titan', 'dbpedia')}),
             'args': {}
         },
+        {
+            'lookup': (DBLookup, {}),
+            'args': {}
+        },
     ],
     FastBert: [
         {
@@ -57,5 +61,5 @@ for generator, configs in generators.items():
         # res.append(evaluator.score(DatasetEnum.T2D))
         res.append(evaluator.score_all())
 
-with open(f"results_{datetime.now().strftime('%d/%m/%Y_%H:%M:%S')}", 'w', encoding='utf-8') as f:
+with open(f"results_{datetime.now().strftime('%d%m%Y_%H%M%S')}", 'w', encoding='utf-8') as f:
     json.dump(res, f, ensure_ascii=False, indent=2)
