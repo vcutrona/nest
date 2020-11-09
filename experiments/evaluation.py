@@ -117,7 +117,6 @@ class CEAEvaluator:
         gt_cell_ent, correct_cells, annotated_cells = list(), list(), list()
 
         for table in tables:
-            print(table.tab_id)
             gt_table_ann = table.gt_cell_annotations
             table_ann = table.cell_annotations
             gt_cell_ent += list(gt_table_ann)

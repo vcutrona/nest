@@ -1,103 +1,61 @@
 import json
+from datetime import datetime
 
 from annotators import CEAAnnotator
-from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, FastBertConfig, \
-    FactBaseConfig
 from data_model.lookup import ESLookupConfig
+from datasets import DatasetEnum
 from experiments.evaluation import CEAEvaluator
 from generators.baselines import LookupGenerator, FactBase
 from generators.ours import FastBert
-from datasets import DatasetEnum
 from lookup.services import WikipediaSearch, ESLookup, DBLookup
 
 generators = {
     LookupGenerator: [
         {
-            'lookup': (ESLookup, {}),
-            'args': {
-                'threads': 6
-            }
-        },
-        {
-            'lookup': (ESLookup, {}),
-            'args': {
-                'threads': 6,
-                'config': CandidateGeneratorConfig(max_subseq_len=None)
-            }
+            'lookup': (ESLookup, {'config': ESLookupConfig('titan', 'dbpedia')}),
+            'args': {}
         },
         {
             'lookup': (DBLookup, {}),
-            'args': {
-                'threads': 2,
-                'chunk_size': 1000
-            }
-        },
-        {
-            'lookup': (DBLookup, {}),
-            'args': {
-                'threads': 2,
-                'chunk_size': 1000,
-                'config': CandidateGeneratorConfig(max_subseq_len=None)
-            }
+            'args': {}
         },
         {
             'lookup': (WikipediaSearch, {}),
-            'args': {
-                'threads': 3,
-                'chunk_size': 1000
-            }
+            'args': {}
         },
+    ],
+    FactBase: [
         {
-            'lookup': (WikipediaSearch, {}),
-            'args': {
-                'threads': 3,
-                'chunk_size': 1000,
-                'config': CandidateGeneratorConfig(max_subseq_len=None)
-            }
-        }
+            'lookup': (ESLookup, {'config': ESLookupConfig('titan', 'dbpedia')}),
+            'args': {}
+        },
     ],
     FastBert: [
         {
-            'lookup': (ESLookup, {}),
-            'args': {}
-        },
-        {
-            'lookup': (ESLookup, {}),
-            'args': {'config': FastBertConfig(max_subseq_len=None,
-                                              abstract='short',
-                                              abstract_max_tokens=512)}
-        },
-        {
-            'lookup': (DBLookup, {}),
+            'lookup': (ESLookup, {'config': ESLookupConfig('titan', 'dbpedia')}),
             'args': {}
         },
         {
             'lookup': (DBLookup, {}),
-            'args': {'config': FastBertConfig(max_subseq_len=None,
-                                              abstract='short',
-                                              abstract_max_tokens=512)}
-        },
-        {
-            'lookup': (WikipediaSearch, {}),
             'args': {}
         },
         {
             'lookup': (WikipediaSearch, {}),
-            'args': {'config': FastBertConfig(max_subseq_len=None,
-                                              abstract='short',
-                                              abstract_max_tokens=512)}
+            'args': {}
         }
     ]
 }
 
 res = []
+
 for generator, configs in generators.items():
     for config in configs:
         lookup_ = config['lookup'][0](**config['lookup'][1])
         generator_ = generator(lookup_, **config['args'])
         annotator_ = CEAAnnotator(generator_)
         evaluator = CEAEvaluator(annotator_)
+        # res.append(evaluator.score(DatasetEnum.T2D))
         res.append(evaluator.score_all())
 
-with open('experiments_results.json', 'w', encoding='utf-8') as f:
-    json.dump(res, f, ensure_ascii=False, indent=4)
+with open(f"results_{datetime.now().strftime('%d/%m/%Y_%H:%M:%S')}", 'w', encoding='utf-8') as f:
+    json.dump(res, f, ensure_ascii=False, indent=2)
