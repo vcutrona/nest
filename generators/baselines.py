@@ -181,10 +181,8 @@ class FactBase(CandidateGenerator):
 
             # Coarse- and fine-grained searches failed: check for an exact match!
             if search_key not in generator_results:
-                if candidates:
-                    labels = self._dbp.get_label(candidates[0])
-                    if search_key.label in labels:
-                        generator_results[search_key] = GeneratorResult(search_key, candidates)
+                if candidates and search_key.label in self._dbp.get_label(candidates[0]):
+                    generator_results[search_key] = GeneratorResult(search_key, candidates)
                 else:  # No results
                     generator_results[search_key] = GeneratorResult(search_key, [])
 
