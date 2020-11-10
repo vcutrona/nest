@@ -197,7 +197,7 @@ class DBpediaWrapper:
          - value.upper()
          - value.title()
         """
-        words_set = {value, value.lower(), value.upper(), value.capitalize(), value.title()}
+        words_set = {'"%s"' % v for v in {value, value.lower(), value.upper(), value.capitalize(), value.title()}}
         words_set.update(["%s@en" % w for w in words_set])
         query = """
         SELECT distinct ?subject (str(?label) as ?label)
@@ -208,7 +208,7 @@ class DBpediaWrapper:
           { ?subject <%s> [rdfs:label ?value] . }
           ?subject rdfs:label ?label .
           FILTER (langMatches(lang(?label), "EN") || langMatches(lang(?label), ""))
-        }""" % (" ".join(['"%s"' % w for w in words_set]), prop, prop)
+        }""" % (" ".join(words_set), prop, prop)
         self._sparql.setQuery(query)
         results = {}
         for result in self._sparql.query().convert()["results"]["bindings"]:
