@@ -1,5 +1,5 @@
+import os
 from enum import Enum
-from functools import lru_cache
 from typing import Dict, Tuple, List
 
 import requests
@@ -8,6 +8,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 
 from data_model.kgs import DBpediaWrapperConfig
+from utils.caching import CacheWrapper, KVPair
 
 PROPERTIES_BLACKLIST = ['http://dbpedia.org/ontology/abstract',
                         'http://dbpedia.org/ontology/wikiPageWikiLink',
@@ -29,6 +30,8 @@ class DBpediaWrapper:
 
         self._sparql = SPARQLWrapper(self._config.sparql_endpoint, defaultGraph=self._config.default_graph)
         self._sparql.setReturnFormat(JSON)
+
+        self._cache = CacheWrapper(os.path.join(os.path.dirname(__file__), 'DBpediaWrapper'), int(4e9))
 
     def _get_es_doc_by_id(self, doc_id):
         docs = self._get_es_docs_by_ids([doc_id])
@@ -68,6 +71,9 @@ class DBpediaWrapper:
         if 'surface_form_keyword' in doc:
             return doc['surface_form_keyword']
         else:
+            cached = self._cache.get_cached_entry(uri)
+            if cached:
+                return cached
             self._sparql.setQuery("""
                     SELECT distinct ?label
                     WHERE {
@@ -75,8 +81,10 @@ class DBpediaWrapper:
                     FILTER (langMatches(lang(?label), "EN") || langMatches(lang(?label), "")) }
                     """ % uri)
 
-            return [result["label"]["value"]
-                    for result in self._sparql.query().convert()["results"]["bindings"]]
+            result = [result["label"]["value"]
+                      for result in self._sparql.query().convert()["results"]["bindings"]]
+            self._cache.set_entry(KVPair(uri, result))
+            return result
 
     def fetch_long_abstracts(self, uris):
         """
@@ -85,7 +93,7 @@ class DBpediaWrapper:
         :param uris: list of URIs
         :return: a dictionary Dict(uri, abstract)
         """
-
+        # TODO: cache
         results = []
 
         for i in range(0, len(uris), 25):
@@ -134,9 +142,11 @@ class DBpediaWrapper:
               FILTER(lcase(str(?aValue))=?value)
             }
         """
+
+        cached_entries, to_compute = self._cache.get_cached_entries(subj_obj_pairs)
         results = {}
-        for i in range(0, len(subj_obj_pairs), 25):
-            query_values = " ".join(map(lambda x: '(<%s> "%s")' % x, subj_obj_pairs[i:i + 25]))
+        for i in range(0, len(to_compute), 25):
+            query_values = " ".join(map(lambda x: '(<%s> "%s")' % x, to_compute[i:i + 25]))
             self._sparql.setQuery(query % query_values)
             for result in self._sparql.query().convert()["results"]["bindings"]:
                 key, value = (result['entity']['value'], result["value"]['value']), result["rel"]['value']
@@ -145,6 +155,9 @@ class DBpediaWrapper:
                 if key not in results:
                     results[key] = []
                 results[key].append(value)
+
+        self._cache.update_cache_entries([KVPair(sub_obj_pair, results[sub_obj_pair]) for sub_obj_pair in to_compute])
+        results.update(dict(cached_entries))
         return results
 
     def get_types(self, uri):
@@ -171,7 +184,6 @@ class DBpediaWrapper:
             return doc['description']
         return []
 
-    @lru_cache
     def get_subjects(self, prop: str, value: str) -> Dict[str, List[str]]:
         """
         Retrieve all the subject of triples <subject, prop, value>, along with their labels.
@@ -197,6 +209,11 @@ class DBpediaWrapper:
          - value.upper()
          - value.title()
         """
+
+        cached = self._cache.get_cached_entry((prop, value))
+        if cached:
+            return cached
+
         words_set = {'"%s"' % v for v in {value, value.lower(), value.upper(), value.capitalize(), value.title()}}
         words_set.update(["%s@en" % w for w in words_set])
         query = """
@@ -216,6 +233,8 @@ class DBpediaWrapper:
             if subject not in results:
                 results[subject] = []
             results[subject].append(label)
+
+        self._cache.set_entry(KVPair((prop, value), results))
         return results
 
 
