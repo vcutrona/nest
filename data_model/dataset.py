@@ -119,6 +119,15 @@ class Table:
         return SearchKey(row[cell.col_id],
                          tuple(row[self._df.columns.drop(cell.col_id)].to_dict().items()))
 
+    def get_search_keys_cells_dict(self) -> Dict[SearchKey, List[Cell]]:
+        search_keys_dict = {}
+        for cell in self._gt_cell_annotations:
+            search_key = self.get_search_key(cell)
+            if search_key not in search_keys_dict:
+                search_keys_dict[search_key] = []
+            search_keys_dict[search_key].append(cell)
+        return search_keys_dict
+
     def get_annotated_cells(self) -> List[Cell]:
         return list(self._cell_annotations)
 

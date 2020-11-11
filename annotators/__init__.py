@@ -31,39 +31,38 @@ class CEAAnnotator:
         return self._generator.id
 
     def annotate_table(self, table: Table):
-        # check existing result, if filename is given
         filename = os.path.join(
                 os.path.dirname(__file__),
                 'annotations',
                 '%s_%s_%s_%s_%s.pkl' % (*self._generator.id, table.dataset_id, table.tab_id))
-        if filename and os.path.isfile(filename):
-            return pickle.load(open(filename, 'rb'))
 
-        # keep the cell-search_key pair -> results may be shuffled!
-        search_key_cell_dict = {table.get_search_key(cell_): cell_ for cell_ in table.get_gt_cells()}
+        # check existing result
+        if not os.path.exists(filename):
+            # keep the cell-search_key pair -> results may be shuffled!
+            search_key_cell_dict = table.get_search_keys_cells_dict()
 
-        # Parallelize: if there are many cells, annotate chunks of cells (like mini-tables)
-        # # TODO delegate parallelization to Generators
-        # if self._micro_table_size > 0:
-        #     # print("Parallel", table, len(target_cells))
-        #     results = functools.reduce(operator.iconcat,
-        #                                process_map(self._generator.get_candidates,
-        #                                            list(chunk_list(list(search_key_cell_dict.keys()),
-        #                                                            self._micro_table_size)),
-        #                                            max_workers=2),
-        #                                [])
-        # else:
-        #     # print("NO Parallel", table, len(target_cells))
+            # Parallelize: if there are many cells, annotate chunks of cells (like mini-tables)
+            # # TODO delegate parallelization to Generators
+            # if self._micro_table_size > 0:
+            #     # print("Parallel", table, len(target_cells))
+            #     results = functools.reduce(operator.iconcat,
+            #                                process_map(self._generator.get_candidates,
+            #                                            list(chunk_list(list(search_key_cell_dict.keys()),
+            #                                                            self._micro_table_size)),
+            #                                            max_workers=2),
+            #                                [])
+            # else:
+            #     # print("NO Parallel", table, len(target_cells))
 
-        results = self._generator.get_candidates(table)
-        for search_key, candidates in results:
-            if candidates:
-                table.annotate_cell(search_key_cell_dict[search_key], Entity(candidates[0]))  # first candidate = best
+            results = self._generator.get_candidates(table)
+            for search_key, candidates in results:
+                if candidates:
+                    for cell in search_key_cell_dict[search_key]:
+                        table.annotate_cell(cell, Entity(candidates[0]))  # first candidate = best
 
-        if filename:
             pickle.dump(table, open(filename, 'wb'))
 
-        return table
+        return pickle.load(open(filename, 'rb'))
 
     def annotate_dataset(self, dataset: DatasetEnum):
         """
