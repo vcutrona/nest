@@ -52,7 +52,7 @@ class WikipediaSearchConfig(LookupServiceConfig):
 @dataclass
 class DBLookupConfig(LookupServiceConfig):
     url: str
-    max_hits: int = 5
+    max_hits: int = 10
     enable_cache: bool = True
 
     def cache_dir(self):
