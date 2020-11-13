@@ -114,7 +114,7 @@ class FactBase(CandidateGenerator):
         """
         candidates = []
         for candidate, c_labels in self._dbp.get_subjects(relation, value).items():
-            scores = sorted([(candidate, edit_distance(label, c_label)) for c_label in c_labels], key=lambda s: s[1])
+            scores = sorted([(candidate, edit_distance(label, c_label)/max(len(label), len(c_label))) for c_label in c_labels], key=lambda s: s[1])
             if scores:
                 candidates.append(scores[0])  # keep the best label for each candidate
 
