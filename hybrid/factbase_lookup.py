@@ -1,95 +1,94 @@
-import csv
 import nltk
-import pandas as pd
 from nltk.corpus import stopwords
-#from generators.utils import AbstractCollector
-#from lookup.services import DBLookup, ESLookup
-#from utils.functions import simplify_string, first_sentence
+
+from data_model.lookup import ESLookupConfig
+from lookup.services import DBLookup, ESLookup
+from utils.functions import simplify_string, first_sentence
+from utils.kgs import DBpediaWrapper
 
 
-def sortTable(table, label):
-    """
-    Sort a table by the given label
-
-    :param table: the path of the table to be ordered
-    :param label: the label used to sort
-    :return:
-    """
-    with open(table, 'r', newline='') as f_input:
-        csv_input = csv.DictReader(f_input)
-        data = sorted(csv_input, key=lambda row: (row[label]))
-
-    with open(table, 'w', newline='') as f_output:
-        csv_output = csv.DictWriter(f_output, fieldnames=csv_input.fieldnames)
-        csv_output.writeheader()
-        csv_output.writerows(data)
-
-    return table
-
-
-def getLabelColumn(table):
-    """
-    Get the label's values of many tables
-
-    :param table: the summary table containing the tables to retrieve from
-    :return: a list of list containing the label's values divided by tables
-    """
-
-    labelList = []
-    labelLoL = []
-    for row in range(table.shape[0]):
-        tab_id = table['table'][row]
-        col_id = table['col_id'][row]
-        row_id = table['row_id'][row]
-        tab = pd.read_csv('/datahdd/gpuleri/T2D/tables/' + tab_id + '.csv')
-        #tab = pd.read_csv('datasets/T2D/tables/' + tab_id + '.csv')
-        if row == 0:
-            labelList.append(tab.iloc[row_id - 1][col_id])
-        else:
-            if table['table'][row - 1] == tab_id:
-                labelList.append(tab.iloc[row_id - 1][col_id])
-            else:
-                labelLoL.append(labelList)
-                labelList = []
-                labelList.append(tab.iloc[row_id - 1][col_id])
-    labelLoL.append(labelList)
-
-    return labelLoL
-
-
-def getReferenceColumns(table):
-    """
-    Get the reference columns' values of many tables
-
-    :param table: the summary table containing the tables to retrieve from
-    :return: a list of list containing a tuple (column name, value) divided by tables
-    """
-    refList = []
-    refLoL = []
-    for row in range(table.shape[0]):
-        tab_id = table['table'][row]
-        col_id = table['col_id'][row]
-        row_id = table['row_id'][row]
-        tab = pd.read_csv('datasets/T2D/tables/' + tab_id + '.csv')
-        value = list(tab.iloc[row_id - 1])
-        value.remove(tab.iloc[row_id - 1][col_id])
-        key = []
-        for x in tab.columns:
-            key.append(x)
-        key.remove(tab.columns[col_id])
-        dictionary = zip(key, value)
-        if row == 0:
-            refList.append(dict(dictionary))
-        else:
-            if table['table'][row - 1] == tab_id:
-                refList.append(dict(dictionary))
-            else:
-                refLoL.append(refList)
-                refList = []
-                refList.append(dict(dictionary))
-    refLoL.append(refList)
-
-    return refLoL
+# def sortTable(table, label):
+#     """
+#     Sort a table by the given label
+#
+#     :param table: the path of the table to be ordered
+#     :param label: the label used to sort
+#     :return:
+#     """
+#     with open(table, 'r', newline='') as f_input:
+#         csv_input = csv.DictReader(f_input)
+#         data = sorted(csv_input, key=lambda row: (row[label]))
+#
+#     with open(table, 'w', newline='') as f_output:
+#         csv_output = csv.DictWriter(f_output, fieldnames=csv_input.fieldnames)
+#         csv_output.writeheader()
+#         csv_output.writerows(data)
+#
+#     return table
+#
+#
+# def getLabelColumn(table):
+#     """
+#     Get the label's values of many tables
+#
+#     :param table: the summary table containing the tables to retrieve from
+#     :return: a list of list containing the label's values divided by tables
+#     """
+#
+#     labelList = []
+#     labelLoL = []
+#     for row in range(table.shape[0]):
+#         tab_id = table['table'][row]
+#         col_id = table['col_id'][row]
+#         row_id = table['row_id'][row]
+#         tab = pd.read_csv('/home/vincenzo/git-repositories/fast-candidate-selection/datasets/T2D/tables/' + tab_id + '.csv')
+#         if row == 0:
+#             labelList.append(tab.iloc[row_id - 1][col_id])
+#         else:
+#             if table['table'][row - 1] == tab_id:
+#                 labelList.append(tab.iloc[row_id - 1][col_id])
+#             else:
+#                 labelLoL.append(labelList)
+#                 labelList = []
+#                 labelList.append(tab.iloc[row_id - 1][col_id])
+#     labelLoL.append(labelList)
+#
+#     return labelLoL
+#
+#
+# def getReferenceColumns(table):
+#     """
+#     Get the reference columns' values of many tables
+#
+#     :param table: the summary table containing the tables to retrieve from
+#     :return: a list of list containing a tuple (column name, value) divided by tables
+#     """
+#     refList = []
+#     refLoL = []
+#     for row in range(table.shape[0]):
+#         tab_id = table['table'][row]
+#         col_id = table['col_id'][row]
+#         row_id = table['row_id'][row]
+#         tab = pd.read_csv('/home/vincenzo/git-repositories/fast-candidate-selection/datasets/T2D/tables/' + tab_id + '.csv')
+#         value = list(tab.iloc[row_id - 1])
+#         value.remove(tab.iloc[row_id - 1][col_id])
+#         key = []
+#         for x in tab.columns:
+#             key.append(x)
+#         key.remove(tab.columns[col_id])
+#         dictionary = zip(key, value)
+#         if row == 0:
+#             refList.append(dict(dictionary))
+#         else:
+#             if table['table'][row - 1] == tab_id:
+#                 refList.append(dict(dictionary))
+#             else:
+#                 refLoL.append(refList)
+#                 refList = []
+#                 refList.append(dict(dictionary))
+#     refLoL.append(refList)
+#
+#     return refLoL
 
 
 def getTypes(uri):
@@ -99,7 +98,7 @@ def getTypes(uri):
     :param uri: the URI to be read
     :return: a list of types
     """
-    abc = AbstractCollector()
+    abc = DBpediaWrapper()
     toRemove = ['http://www.w3.org/2002/07/owl#Thing']
     result = abc._get_es_docs_by_ids(uri)
     types = []
@@ -118,7 +117,7 @@ def getDescriptionTokens(uri):
     :param uri: the URI to be read
     :return: a list of keywords
     """
-    abc = AbstractCollector()
+    abc = DBpediaWrapper()
     tokenizer = nltk.RegexpTokenizer(r"\w+")
     result = abc._get_es_docs_by_ids(uri)
     stop_words = set(stopwords.words('english'))
@@ -130,6 +129,8 @@ def getDescriptionTokens(uri):
             if word is not None:
                 word_tokens = tokenizer.tokenize(word.lower())
                 return [word for word in word_tokens if word not in stop_words]
+
+    return []
 
 
 def getMostFrequent(list_, n=1):
@@ -159,15 +160,16 @@ def containsFact(uri, a, v):
     :param v: the value of the relation a
     :return: a list of tuples (a, relation found)
     """
-    abc = AbstractCollector()
+    abc = DBpediaWrapper()
     toRemove = ['http://dbpedia.org/ontology/abstract', 'http://dbpedia.org/ontology/wikiPageWikiLink',
                 'http://www.w3.org/2000/01/rdf-schema#comment', 'http://purl.org/dc/terms/subject',
                 'http://www.w3.org/2000/01/rdf-schema#label', 'http://www.w3.org/2002/07/owl#Thing']
-    relations = abc.get_relation(uri, v)
+    relations = abc.get_relations([(uri, v)])
     candidateRelations = []
-    for rel in relations:
-        if rel not in toRemove:
-            candidateRelations.append((a, rel))
+    for pair, col_relations in relations.items():
+        for rel in col_relations:
+            if rel not in toRemove:
+                candidateRelations.append((a, rel))
 
     return candidateRelations
 
@@ -251,17 +253,18 @@ def search_loose(label, relation, value):
     :param value: a value
     :return: a list of results
     """
-    eslookup = ESLookup()
-    abc = AbstractCollector()
+    eslookup = ESLookup(ESLookupConfig('titan', 'dbpedia'))
+    abc = DBpediaWrapper()
 
     results = eslookup._lookup(labels=[label])[0][1]
 
     removeList = []
     for res in results:
-        relations = abc.get_relation(res, value)
+        relations = abc.get_relations([(res, value)])
         remove = True
-        if relation in relations:
-            remove = False
+        for pair, col_relations in relations.items():
+            if relation in col_relations:
+                remove = False
 
         if remove:
             removeList.append(res)
