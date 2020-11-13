@@ -2,9 +2,9 @@ import csv
 import nltk
 import pandas as pd
 from nltk.corpus import stopwords
-from generators.utils import AbstractCollector
-from lookup.services import DBLookup, ESLookup
-from utils.functions import simplify_string, firstSentence
+#from generators.utils import AbstractCollector
+#from lookup.services import DBLookup, ESLookup
+#from utils.functions import simplify_string, first_sentence
 
 
 def sortTable(table, label):
@@ -41,7 +41,8 @@ def getLabelColumn(table):
         tab_id = table['table'][row]
         col_id = table['col_id'][row]
         row_id = table['row_id'][row]
-        tab = pd.read_csv('T2D_GoldStandard/t2d_tables_instance/' + tab_id + '.csv')
+        tab = pd.read_csv('/datahdd/gpuleri/T2D/tables/' + tab_id + '.csv')
+        #tab = pd.read_csv('datasets/T2D/tables/' + tab_id + '.csv')
         if row == 0:
             labelList.append(tab.iloc[row_id - 1][col_id])
         else:
@@ -69,7 +70,7 @@ def getReferenceColumns(table):
         tab_id = table['table'][row]
         col_id = table['col_id'][row]
         row_id = table['row_id'][row]
-        tab = pd.read_csv('T2D_GoldStandard/t2d_tables_instance/' + tab_id + '.csv')
+        tab = pd.read_csv('datasets/T2D/tables/' + tab_id + '.csv')
         value = list(tab.iloc[row_id - 1])
         value.remove(tab.iloc[row_id - 1][col_id])
         key = []
@@ -125,7 +126,7 @@ def getDescriptionTokens(uri):
     for _, doc in result:
         if len(doc['description']) > 0:
             word = simplify_string(doc['description'][0], dates=False, numbers=False, single_char=False, brackets=True)
-            word = firstSentence(word)
+            word = first_sentence(word)
             if word is not None:
                 word_tokens = tokenizer.tokenize(word.lower())
                 return [word for word in word_tokens if word not in stop_words]
