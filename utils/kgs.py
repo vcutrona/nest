@@ -31,7 +31,14 @@ class DBpediaWrapper:
         self._sparql = SPARQLWrapper(self._config.sparql_endpoint, defaultGraph=self._config.default_graph)
         self._sparql.setReturnFormat(JSON)
 
-        self._cache = CacheWrapper(os.path.join(os.path.dirname(__file__), 'DBpediaWrapper'), int(4e9))
+        self._subj_cache = CacheWrapper(os.path.join(os.path.dirname(__file__), '.cache', 'DBpediaWrapper',
+                                                     'subj'), int(4e9))
+        self._rels_cache = CacheWrapper(os.path.join(os.path.dirname(__file__), '.cache', 'DBpediaWrapper',
+                                                     'rels'), int(4e9))
+        self._type_cache = CacheWrapper(os.path.join(os.path.dirname(__file__), '.cache', 'DBpediaWrapper',
+                                                     'type'), int(4e9))
+        self._label_cache = CacheWrapper(os.path.join(os.path.dirname(__file__), '.cache', 'DBpediaWrapper',
+                                                      'label'), int(4e9))
 
     def _get_es_doc_by_id(self, doc_id):
         docs = self._get_es_docs_by_ids([doc_id])
@@ -71,7 +78,7 @@ class DBpediaWrapper:
         if 'surface_form_keyword' in doc:
             return doc['surface_form_keyword']
         else:
-            cached = self._cache.get_cached_entry(uri)
+            cached = self._label_cache.get_cached_entry(uri)
             if cached:
                 return cached
             self._sparql.setQuery("""
@@ -83,7 +90,7 @@ class DBpediaWrapper:
 
             result = [result["label"]["value"]
                       for result in self._sparql.query().convert()["results"]["bindings"]]
-            self._cache.set_entry(KVPair(uri, result))
+            self._label_cache.set_entry(KVPair(uri, result))
             return result
 
     def fetch_long_abstracts(self, uris):
@@ -143,21 +150,20 @@ class DBpediaWrapper:
             }
         """
 
-        cached_entries, to_compute = self._cache.get_cached_entries(subj_obj_pairs)
-        results = {}
+        cached_entries, to_compute = self._rels_cache.get_cached_entries(subj_obj_pairs)
+        results = {key: [] for key in to_compute}
         for i in range(0, len(to_compute), 25):
             query_values = " ".join(map(lambda x: '(<%s> "%s")' % x, to_compute[i:i + 25]))
             self._sparql.setQuery(query % query_values)
             for result in self._sparql.query().convert()["results"]["bindings"]:
                 key, value = (result['entity']['value'], result["value"]['value']), result["rel"]['value']
-                if filter_blacklisted and value in PROPERTIES_BLACKLIST:
-                    continue
-                if key not in results:
-                    results[key] = []
-                results[key].append(value)
+                if not (filter_blacklisted and value in PROPERTIES_BLACKLIST):
+                    results[key].append(value)
 
-        self._cache.update_cache_entries([KVPair(sub_obj_pair, results[sub_obj_pair]) for sub_obj_pair in to_compute])
-        results.update(dict(cached_entries))
+        self._rels_cache.update_cache_entries([KVPair(sub_obj_pair, (sub_obj_pair, results[sub_obj_pair]))
+                                               for sub_obj_pair in to_compute])
+        if cached_entries:
+            results.update(dict(cached_entries))
         return results
 
     def get_types(self, uri):
@@ -169,7 +175,25 @@ class DBpediaWrapper:
         """
         doc = self._get_es_doc_by_id(uri)
         if 'type' in doc:
-            return [t for t in doc['type'] if t not in TYPES_BLACKLIST]
+            types = [t for t in doc['type'] if t not in TYPES_BLACKLIST]
+            # if types:
+            return types
+
+        # no type in index -> check online
+        # cached = self._type_cache.get_cached_entry(uri)
+        # if cached:
+        #     return cached
+        # self._sparql.setQuery("""
+        #                     SELECT distinct ?type
+        #                     WHERE {
+        #                       <%s> a ?type .
+        #                     }
+        #                     """ % uri)
+        #
+        # result = [result["type"]["value"]
+        #           for result in self._sparql.query().convert()["results"]["bindings"]]
+        # self._label_cache.set_entry(KVPair(uri, result))
+        # return result
         return []
 
     def get_descriptions(self, uri):
@@ -210,7 +234,7 @@ class DBpediaWrapper:
          - value.title()
         """
 
-        cached = self._cache.get_cached_entry((prop, value))
+        cached = self._subj_cache.get_cached_entry((prop, value))
         if cached:
             return cached
 
@@ -234,7 +258,7 @@ class DBpediaWrapper:
                 results[subject] = []
             results[subject].append(label)
 
-        self._cache.set_entry(KVPair((prop, value), results))
+        self._subj_cache.set_entry(KVPair((prop, value), results))
         return results
 
 
