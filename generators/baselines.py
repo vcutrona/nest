@@ -45,7 +45,7 @@ class FactBase(CandidateGenerator):
             desc = simplify_string(descriptions[0], dates=False, numbers=False, single_char=False, brackets=True)
             short_desc = first_sentence(desc)
             if short_desc:
-                return tokenize(descriptions[0])
+                return tokenize(short_desc)
 
         return []
 
