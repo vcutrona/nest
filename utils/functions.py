@@ -184,21 +184,51 @@ def simplify_string(input_str, dates=True, numbers=True, single_char=True, brack
     return s
 
 
-def first_sentence(input_str):
+def first_sentence(input_str, min_length=5):
     """
-    Take only the first sentence in a text by removing all the text after the first dot.
-    It also uses a regex "don't consider dots if they have only one or two character before".
+    Return the text before the first full stop index.
+    We consider a dot "." a full stop if precedes a space and it follows:
+    - a word with at least 2 chars
+    - a punctuation symbol
 
     :param input_str: the text
+    :param min_length: minimum required length
     :return: the first sentence
     """
-    list_ = re.findall("(\s.[.]|\s..[.])", input_str)
-    for x in list_:
-        if x in input_str:
-            input_str = input_str.replace(x, '')
-    if len(input_str) > 0:
-        return input_str.partition('.')[0]
+    # list_ = re.findall("(\s.[.]|\s..[.])", input_str)
+    # for x in list_:
+    #     if x in input_str:
+    #         input_str = input_str.replace(x, '')
+    # if len(input_str) > 0:
+    #     return input_str.partition('.')[0]
+    #
+    # pieces = input_str.split('.')  # get all pieces separated by dots (mainly sentences)
+    # pieces.reverse()
+    # short_sentence = ""
+    # while pieces and len(short_sentence.split()) < min_length:
+    #     short_sentence += pieces.pop() + '.'  # pop a piece
+    #     while len(pieces[-1]) == 1:  # pop all the subsequent pieces if they are chars (e.g., acronyms like "U.S.")
+    #         short_sentence += pieces.pop() + '.'
 
+    punct_possible = '!#$%&\(\)\*\+,\-:;<=>?@_|~\{\}'
+
+    end = None
+    regex = "([\w" + punct_possible + "]{2,}|[" + punct_possible + "]|\d)\.\s"
+    full_stop = re.search(regex, input_str)
+    if full_stop:
+        end = full_stop.end()
+    partial_string = input_str[:end]
+    # Check if we reach the required length, otherwise find a new full stop
+    while len(partial_string.split()) < min_length and partial_string != input_str:
+        sub_str = input_str[len(partial_string):]
+        full_stop = re.search(regex, sub_str)
+        end = None
+        if full_stop:
+            end = full_stop.end()
+        app = input_str[len(partial_string):][:end]
+        partial_string += app
+
+    return partial_string.strip()
 
 # def flatten(list_):
 #     """
