@@ -35,7 +35,7 @@ class CellAnnotation(NamedTuple):
 
     def __eq__(self, o: object) -> bool:
         if isinstance(o, CellAnnotation):
-            return len(set(self.entities) & set(o.entities)) > 0
+            return self.cell == o.cell and len(set(self.entities) & set(o.entities)) > 0
         return False
 
 
