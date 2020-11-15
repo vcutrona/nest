@@ -1,11 +1,10 @@
 import urllib.parse
-from xml.etree import ElementTree
 
 import requests
 from elasticsearch import Elasticsearch, TransportError
 from elasticsearch_dsl import Q, Search
 
-from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig
+from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig, ESLookupFuzzyConfig
 from lookup import LookupService
 
 
@@ -14,10 +13,9 @@ class ESLookup(LookupService):
     Lookup service for ElasticSearch indexes.
     """
 
-    def __init__(self, config: ESLookupConfig = ESLookupConfig('localhost', 'dbpedia')):
+    def __init__(self, config: ESLookupConfig):
         super().__init__(config)
-
-        assert Elasticsearch(self._config.host).ping()  # check if the server is up and running
+        assert Elasticsearch(self._config.host).ping()
 
     def _get_es_docs(self, labels):
         """
@@ -29,22 +27,7 @@ class ESLookup(LookupService):
         elastic = Elasticsearch(self._config.host)
         for label in labels:
             s = Search(using=elastic, index=self._config.index)
-            q = {'value': str(label).lower()}
-
-            if self._config.fuzziness:
-                q['fuzziness'] = self._config.fuzziness
-            if self._config.prefix_length:
-                q['prefix_length'] = self._config.prefix_length
-            if self._config.max_expansions:
-                q['max_expansions'] = self._config.max_expansions
-
-            s.query = Q('bool',
-                        must=[],
-                        should=[Q('match', description=str(label).lower()),
-                                Q('multi_match', query=str(label).lower(), fields=['surface_form_keyword'], boost=5),
-                                Q({"fuzzy": {"surface_form_keyword": q}})]
-                        )
-
+            s.query = self._query(label)
             s = s[0:self._config.size]
 
             try:
@@ -60,6 +43,42 @@ class ESLookup(LookupService):
         """
         return [LookupResult(short_label, [hit['uri'] for hit in candidates])
                 for short_label, candidates in self._get_es_docs(labels)]
+
+    def _query(self, label):
+        raise NotImplementedError
+
+
+class ESLookupFuzzy(ESLookup):
+    def __init__(self, config: ESLookupFuzzyConfig = ESLookupFuzzyConfig('localhost', 'dbpedia-ngram')):
+        super().__init__(config)
+
+    def _query(self, label):
+        q = {'value': str(label).lower()}
+
+        if self._config.fuzziness:
+            q['fuzziness'] = self._config.fuzziness
+        if self._config.prefix_length:
+            q['prefix_length'] = self._config.prefix_length
+        if self._config.max_expansions:
+            q['max_expansions'] = self._config.max_expansions
+
+        return Q('bool',
+                 should=[Q('match', description=str(label).lower()),
+                         Q('multi_match', query=str(label).lower(), fields=['surface_form_keyword'], boost=5),
+                         Q({"fuzzy": {"surface_form_keyword": q}})
+                         ])
+
+
+class ESLookupTrigram(ESLookup):
+    def __init__(self, config: ESLookupConfig = ESLookupConfig('localhost', 'dbpedia-ngram')):
+        super().__init__(config)
+
+    def _query(self, label):
+        return Q('bool',
+                 must=[Q('multi_match',
+                         query=str(label).lower(),
+                         fields=['surface_form_keyword.ngram'])
+                       ])
 
 
 class WikipediaSearch(LookupService):

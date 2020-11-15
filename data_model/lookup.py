@@ -28,10 +28,17 @@ class ESLookupConfig(LookupServiceConfig):
     host: str
     index: str
     size: int = 10
+    enable_cache: bool = True
+
+    def cache_dir(self):
+        return "index=%s__size=%d" % (self.index, self.size)
+
+
+@dataclass
+class ESLookupFuzzyConfig(ESLookupConfig):
     fuzziness: Optional[int] = 2
     prefix_length: Optional[int] = 0
     max_expansions: Optional[int] = 100
-    enable_cache: bool = True
 
     def cache_dir(self):
         return "index=%s__size=%d__fuzziness=%s__prefix_length=%s__max_expansions=%s" % \

@@ -2,17 +2,17 @@ import json
 from datetime import datetime
 
 from annotators import CEAAnnotator
-from data_model.lookup import ESLookupConfig
+from data_model.lookup import ESLookupFuzzyConfig
 from datasets import DatasetEnum
 from experiments.evaluation import CEAEvaluator
 from generators.baselines import LookupGenerator, FactBase
 from generators.ours import FastBert
-from lookup.services import WikipediaSearch, ESLookup, DBLookup
+from lookup.services import WikipediaSearch, ESLookupFuzzy, DBLookup
 
 generators = {
     LookupGenerator: [
         {
-            'lookup': (ESLookup, {'config': ESLookupConfig('titan', 'dbpedia')}),
+            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
             'args': {}
         },
         {
@@ -26,7 +26,7 @@ generators = {
     ],
     FactBase: [
         {
-            'lookup': (ESLookup, {'config': ESLookupConfig('titan', 'dbpedia')}),
+            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
             'args': {}
         },
         {
@@ -36,7 +36,7 @@ generators = {
     ],
     FastBert: [
         {
-            'lookup': (ESLookup, {'config': ESLookupConfig('titan', 'dbpedia')}),
+            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
             'args': {}
         },
         {
