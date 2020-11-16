@@ -125,7 +125,7 @@ class DBpediaWrapper:
         :param uris: list of URIs
         :return: a dictionary Dict(uri, abstract)
         """
-        return {doc_id: doc['description'][0] if doc['description'] else ''
+        return {doc_id: doc['description'][0] if 'description' in doc and doc['description'] else ''
                 for doc_id, doc in self._get_es_docs_by_ids(uris)}
 
     def get_relations(self, subj_obj_pairs: List[Tuple[str, str]],
