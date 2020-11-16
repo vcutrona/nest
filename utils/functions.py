@@ -6,9 +6,11 @@ from typing import Tuple, Dict, Set
 import nltk
 import numpy as np
 from dateutil.parser import parse
+from gensim import matutils
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem import PorterStemmer
+from numpy import dot
 from scipy.spatial.distance import cosine
 from sklearn.preprocessing import MinMaxScaler
 
@@ -235,6 +237,10 @@ def first_sentence(input_str, min_length=5):
         partial_string += app
 
     return partial_string.strip()
+
+
+def cosine_similarity(v1, v2):
+    return dot(matutils.unitvec(v1), matutils.unitvec(v2))
 
 # def flatten(list_):
 #     """
