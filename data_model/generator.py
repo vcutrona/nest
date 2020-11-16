@@ -64,8 +64,25 @@ class CandidateEmbeddings(NamedTuple):
     abstract_emb: np.ndarray = np.nan
 
 
-class ScoredCandidate(NamedTuple):
+@dataclass
+class ScoredCandidate:
     candidate: str
-    original_rank: int
+    score: float
+
+    def __lt__(self, other):
+        return self.score < other.score
+
+    def __le__(self, other):
+        return self.score <= other.score
+
+    def __gt__(self, other):
+        return self.score > other.score
+
+    def __ge__(self, other):
+        return self.score >= other.score
+
+
+@dataclass
+class ScoredCandidateEmbeddings(ScoredCandidate):
+    original_rank: Optional[int]
     distance: Optional[float]
-    score: Optional[float]

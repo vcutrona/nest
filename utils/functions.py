@@ -11,7 +11,7 @@ from nltk.tokenize import RegexpTokenizer
 from scipy.spatial.distance import cosine
 from sklearn.preprocessing import MinMaxScaler
 
-from data_model.generator import ScoredCandidate, CandidateEmbeddings
+from data_model.generator import CandidateEmbeddings, ScoredCandidateEmbeddings
 
 nltk.download('stopwords')
 
@@ -59,7 +59,7 @@ def truncate_string(string, max_tokens) -> str:
 
 def weighting_by_ranking(candidates: List[CandidateEmbeddings],
                          alpha=0.5,
-                         default_score=np.nan) -> List[ScoredCandidate]:
+                         default_score=np.nan) -> List[ScoredCandidateEmbeddings]:
     """
     Rank the candidates accordingly with the cosine distance between their vectors
     and their original ranks. If the default_score is provided, instances with one or more missing embeddings
@@ -86,16 +86,18 @@ def weighting_by_ranking(candidates: List[CandidateEmbeddings],
     rank_scaler.fit(np.arange(len(candidates)).reshape(-1, 1))
     distance_scaler.fit(np.array(distances).reshape(-1, 1))
 
-    scored_candidates = [ScoredCandidate(c_emb.candidate,
-                                         rank,
-                                         distances[rank],
-                                         np.nansum([
-                                             alpha * rank_scaler.transform([[rank]])[0][0],
-                                             (1 - alpha) * distance_scaler.transform([[distances[rank]]])[0][0]
-                                         ]))
-                         for rank, c_emb in enumerate(candidates)]
+    scored_candidates = [
+        ScoredCandidateEmbeddings(c_emb.candidate,
+                                  np.nansum([
+                                      alpha * rank_scaler.transform([[rank]])[0][0],
+                                      (1 - alpha) * distance_scaler.transform([[distances[rank]]])[0][0]
+                                  ]),
+                                  rank,
+                                  distances[rank]
+                                  )
+        for rank, c_emb in enumerate(candidates)]
 
-    return sorted(scored_candidates, key=lambda s_cand: s_cand.score)
+    return sorted(scored_candidates)  # key=lambda s_cand: s_cand.score)
 
 
 def _remove_dates(input_str):
