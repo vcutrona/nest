@@ -2,7 +2,7 @@ import nltk
 from nltk.corpus import stopwords
 
 from data_model.lookup import ESLookupConfig
-from lookup.services import DBLookup, ESLookup
+from lookup.services import DBLookup, ESLookupFuzzy
 from utils.functions import simplify_string, first_sentence
 from utils.kgs import DBpediaWrapper
 
@@ -253,7 +253,7 @@ def search_loose(label, relation, value):
     :param value: a value
     :return: a list of results
     """
-    eslookup = ESLookup(ESLookupConfig('titan', 'dbpedia'))
+    eslookup = ESLookupFuzzy(ESLookupConfig('titan', 'dbpedia'))
     abc = DBpediaWrapper()
 
     results = eslookup._lookup(labels=[label])[0][1]

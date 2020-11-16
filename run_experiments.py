@@ -2,17 +2,21 @@ import json
 from datetime import datetime
 
 from annotators import CEAAnnotator
-from data_model.lookup import ESLookupFuzzyConfig
+from data_model.lookup import ESLookupFuzzyConfig, ESLookupConfig
 from datasets import DatasetEnum
 from experiments.evaluation import CEAEvaluator
 from generators.baselines import LookupGenerator, FactBase
 from generators.ours import FastBert
-from lookup.services import WikipediaSearch, ESLookupFuzzy, DBLookup
+from lookup.services import WikipediaSearch, ESLookupFuzzy, DBLookup, ESLookupTrigram
 
 generators = {
     LookupGenerator: [
         {
             'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
+            'args': {}
+        },
+        {
+            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
             'args': {}
         },
         {
@@ -30,6 +34,10 @@ generators = {
             'args': {}
         },
         {
+            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
+            'args': {}
+        },
+        {
             'lookup': (DBLookup, {}),
             'args': {}
         },
@@ -37,6 +45,10 @@ generators = {
     FastBert: [
         {
             'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
+            'args': {}
+        },
+        {
+            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
             'args': {}
         },
         {
