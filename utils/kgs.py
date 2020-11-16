@@ -208,6 +208,18 @@ class DBpediaWrapper:
             return doc['description']
         return []
 
+    def get_uri_count(self, uri):
+        """
+        Get the uri_count field of a ES document (from Spotlight lexicalizations)
+
+        :param uri: the entity URI
+        :return: the uri_count value
+        """
+        doc = self._get_es_doc_by_id(uri)
+        if 'uri_count' in doc:
+            return doc['uri_count']
+        return 0
+
     def get_subjects(self, prop: str, value: str) -> Dict[str, List[str]]:
         """
         Retrieve all the subject of triples <subject, prop, value>, along with their labels.
