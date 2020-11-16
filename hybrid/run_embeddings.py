@@ -1,53 +1,58 @@
-import time
 import pandas as pd
-import networkx as nx
-from gensim.models import KeyedVectors
+import pickle
+import time
 from ngram import NGram
+from tqdm.contrib.concurrent import process_map
+from kgs import KGEmbedding
 
-from factbase_lookup import sortTable, getLabelColumn
+from functions import simplify_string, tokenize
 
-from embeddings import sfi_to_ste, save, load, generate_candidates, create_subset, \
-    disambiguate_entities, add_edges, normalize_priors, thin_out, best_annotation, annotate
+from embeddings import sfi_to_ste, get_labels, generate_candidates, \
+    disambiguate_entities, add_edges, normalize_priors, thin_out, page_rank, best_annotation, annotate
+
+
+def embeddings_efthy(table):
+    start = time.time()
+
+    labels = get_labels(datasets_dir + 'tables/', table)
+    entity_candidates = generate_candidates(labels, surface_to_entities, ngram)
+    disambiguation_graph, entity_candidates = disambiguate_entities(entity_candidates, w2v)
+    disambiguation_graph = add_edges(entity_candidates, disambiguation_graph)
+    priors = normalize_priors(entity_candidates)
+    disambiguation_graph.remove_edges_from(thin_out(disambiguation_graph))
+    pr = page_rank(disambiguation_graph, priors)
+
+    print(table.shape[0], time.time() - start)
+    return list(best_annotation(entity_candidates, pr))
+
 
 base_dir = '/datahdd/gpuleri/'
-datasets = '/datahdd/gpuleri/T2D/targets/'
-target = datasets + 'T2D_embedding.csv'  # CEA_T2D_Targets.csv
+datasets_dir = '/datahdd/gpuleri/T2D/'
+target = datasets_dir + 'targets/CEA_T2D_Targets.csv'
 
-start = time.time()
-table = pd.read_csv(sortTable(target, 'table'))
-label_column = getLabelColumn(table)
-annotated_table = table.copy()
-annotations = []
-#surface_to_entities = sfi_to_ste(base_dir + 'surfaceFormIndex.csv')  # convert
-#save(surface_to_entities, base_dir + 'surface_to_entities.pickle')
+target_table = pd.read_csv(target)
+annotated_table = target_table.copy()
+tables = [table for tab_id, table in target_table.groupby('tab_id')]
+w2v = KGEmbedding.WORD2VEC
 
-surface_to_entities = load(base_dir + 'surface_to_entities.pickle')
-print("LOAD", time.time() - start)
-ng = NGram([surface_form for surface_form in surface_to_entities.keys()])
-print("LOAD NGRAM", time.time() - start)
-for labels in label_column:
-    begin = time.time()
-    entity_candidates = generate_candidates(labels, surface_to_entities, ng)
-    print("CANDIDATES", len(entity_candidates))
-
-    subset = create_subset(entity_candidates,
-                           base_dir + 'dbpedia-embeddings-skipgram-300-filtered.txt',
-                           base_dir + 'dbpedia-embeddings-skipgram-300-subset.txt')
-    w2v = KeyedVectors.load_word2vec_format(subset, binary=False)
-    disambiguation_graph, entity_candidates = disambiguate_entities(entity_candidates, w2v)
-    disambiguation_graph = add_edges(entity_candidates, disambiguation_graph, w2v)
-    personalization = normalize_priors(entity_candidates)
-    disambiguation_graph.remove_edges_from(thin_out(disambiguation_graph))
-
-    #
-    # NO ETP NEEDED SINCE NX.PAGERANK AUTOMATICALLY NORMALIZE USING THE SAME PAPER'S FORMULA
-    #
-    page_rank = nx.pagerank(disambiguation_graph, tol=1e-04, max_iter=50, alpha=0.9, personalization=personalization)
-    annotations += list(best_annotation(entity_candidates, page_rank))
-    done = time.time()
-    print("ANNOTATE", len(annotations), done - begin)
-    print("TOTAL TIME", time.time() - start)
-
-
+# surface_to_entities = sfi_to_ste(base_dir + 'surfaceFormIndexComplete.csv',
+#                                  base_dir + 'surfaceFormIndex.csv', w2v)  # convert
+# with open(base_dir + 'surface_to_entities.pickle', 'wb') as file:  # save
+#     pickle.dump(surface_to_entities, file, protocol=pickle.HIGHEST_PROTOCOL)
+#     file.close()
+with open(base_dir + 'surface_to_entities.pickle', 'rb') as file:  # load
+    surface_to_entities = pickle.load(file)
+    file.close()
+ngram = NGram([surface_form for surface_form in surface_to_entities.keys()])
+# with open(base_dir + 'ngram.pickle', 'wb') as file:  # save
+#     pickle.dump(ngram, file, protocol=pickle.HIGHEST_PROTOCOL)
+#     file.close()
+# with open(base_dir + 'ngram.pickle', 'rb') as file:  # load
+#     ngram = pickle.load(file)
+#     file.close()
+annotations = process_map(embeddings_efthy,
+                          tables,
+                          max_workers=10)
+annotations = [element for sublist in annotations for element in sublist]
 annotated_table["entity"] = annotations
-annotate(annotated_table, base_dir + 'annotations.csv')
+annotate(annotated_table, base_dir + 'T2D_Targets_sub/T2D_Embeddings_ngram_3S_bis_new.csv')

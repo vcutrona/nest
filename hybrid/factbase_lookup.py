@@ -2,7 +2,7 @@ import csv
 import nltk
 import pandas as pd
 from nltk.corpus import stopwords
-#from generators.utils import AbstractCollector
+#from utils.kgs import DBpediaWrapper
 #from lookup.services import DBLookup, ESLookup
 #from utils.functions import simplify_string, first_sentence
 
@@ -37,8 +37,10 @@ def getLabelColumn(table):
 
     labelList = []
     labelLoL = []
+    print(table.shape[0])
     for row in range(table.shape[0]):
-        tab_id = table['table'][row]
+        print(table[table.columns[0]][row])
+        tab_id = table[table.columns[0]][row]
         col_id = table['col_id'][row]
         row_id = table['row_id'][row]
         tab = pd.read_csv('/datahdd/gpuleri/T2D/tables/' + tab_id + '.csv')
@@ -46,7 +48,7 @@ def getLabelColumn(table):
         if row == 0:
             labelList.append(tab.iloc[row_id - 1][col_id])
         else:
-            if table['table'][row - 1] == tab_id:
+            if table['tab_id'][row - 1] == tab_id:
                 labelList.append(tab.iloc[row_id - 1][col_id])
             else:
                 labelLoL.append(labelList)
@@ -99,7 +101,7 @@ def getTypes(uri):
     :param uri: the URI to be read
     :return: a list of types
     """
-    abc = AbstractCollector()
+    abc = DBpediaWrapper()
     toRemove = ['http://www.w3.org/2002/07/owl#Thing']
     result = abc._get_es_docs_by_ids(uri)
     types = []

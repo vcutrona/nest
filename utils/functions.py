@@ -8,10 +8,11 @@ import numpy as np
 from dateutil.parser import parse
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
+from nltk.stem import PorterStemmer
 from scipy.spatial.distance import cosine
 from sklearn.preprocessing import MinMaxScaler
 
-from data_model.generator import ScoredCandidate, CandidateEmbeddings
+#from data_model.generator import ScoredCandidate, CandidateEmbeddings
 
 nltk.download('stopwords')
 
@@ -57,45 +58,45 @@ def truncate_string(string, max_tokens) -> str:
     return " ".join(string.split(" ")[:max_tokens]).strip()
 
 
-def weighting_by_ranking(candidates: List[CandidateEmbeddings],
-                         alpha=0.5,
-                         default_score=np.nan) -> List[ScoredCandidate]:
-    """
-    Rank the candidates accordingly with the cosine distance between their vectors
-    and their original ranks. If the default_score is provided, instances with one or more missing embeddings
-    are assigned that score, np.nan otherwise.
-    :param candidates: a list of CandidateEmbeddings
-    :param alpha: a value in [0.0, 1.0], which represents the weight of the original rank component.
-           1 - alpha is the weight of the cosine distance between vectors.
-    :param default_score: default score >= 0.0 to assign to instances with missing embeddings
-    :return: a list of ScoredCandidate ranked by score
-    """
-
-    if not candidates:
-        return []
-
-    assert np.isnan(default_score) or default_score >= 0.0
-    assert 0.0 <= alpha <= 1.0
-
-    distances = [cosine(c_emb.context_emb, c_emb.abstract_emb) for c_emb in candidates]
-    if default_score >= 0.0:
-        distances = np.nan_to_num(distances, nan=default_score)
-
-    rank_scaler = MinMaxScaler()
-    distance_scaler = MinMaxScaler()
-    rank_scaler.fit(np.arange(len(candidates)).reshape(-1, 1))
-    distance_scaler.fit(np.array(distances).reshape(-1, 1))
-
-    scored_candidates = [ScoredCandidate(c_emb.candidate,
-                                         rank,
-                                         distances[rank],
-                                         np.nansum([
-                                             alpha * rank_scaler.transform([[rank]])[0][0],
-                                             (1 - alpha) * distance_scaler.transform([[distances[rank]]])[0][0]
-                                         ]))
-                         for rank, c_emb in enumerate(candidates)]
-
-    return sorted(scored_candidates, key=lambda s_cand: s_cand.score)
+# def weighting_by_ranking(candidates: List[CandidateEmbeddings],
+#                          alpha=0.5,
+#                          default_score=np.nan) -> List[ScoredCandidate]:
+#     """
+#     Rank the candidates accordingly with the cosine distance between their vectors
+#     and their original ranks. If the default_score is provided, instances with one or more missing embeddings
+#     are assigned that score, np.nan otherwise.
+#     :param candidates: a list of CandidateEmbeddings
+#     :param alpha: a value in [0.0, 1.0], which represents the weight of the original rank component.
+#            1 - alpha is the weight of the cosine distance between vectors.
+#     :param default_score: default score >= 0.0 to assign to instances with missing embeddings
+#     :return: a list of ScoredCandidate ranked by score
+#     """
+#
+#     if not candidates:
+#         return []
+#
+#     assert np.isnan(default_score) or default_score >= 0.0
+#     assert 0.0 <= alpha <= 1.0
+#
+#     distances = [cosine(c_emb.context_emb, c_emb.abstract_emb) for c_emb in candidates]
+#     if default_score >= 0.0:
+#         distances = np.nan_to_num(distances, nan=default_score)
+#
+#     rank_scaler = MinMaxScaler()
+#     distance_scaler = MinMaxScaler()
+#     rank_scaler.fit(np.arange(len(candidates)).reshape(-1, 1))
+#     distance_scaler.fit(np.array(distances).reshape(-1, 1))
+#
+#     scored_candidates = [ScoredCandidate(c_emb.candidate,
+#                                          rank,
+#                                          distances[rank],
+#                                          np.nansum([
+#                                              alpha * rank_scaler.transform([[rank]])[0][0],
+#                                              (1 - alpha) * distance_scaler.transform([[distances[rank]]])[0][0]
+#                                          ]))
+#                          for rank, c_emb in enumerate(candidates)]
+#
+#     return sorted(scored_candidates, key=lambda s_cand: s_cand.score)
 
 
 def _remove_dates(input_str):
@@ -163,11 +164,14 @@ def _remove_brackets(input_str):
     return input_str
 
 
-def tokenize(sentence: str, language: str = 'english') -> List[str]:
+def tokenize(sentence: str, language: str = 'english', stemming: bool = False) -> List[str]:
     """
-    Simple preprocessing: removes punctuation and stopwords
+    Simple preprocessing: removes punctuation and stopwords and apply stemming if needed
     """
     tokenizer = RegexpTokenizer(r'\w+')
+    if stemming:
+        porter = PorterStemmer()
+        return [porter.stem(w) for w in tokenizer.tokenize(sentence.lower()) if w not in stopwords.words(language)]
     return [w for w in tokenizer.tokenize(sentence.lower()) if w not in stopwords.words(language)]
 
 

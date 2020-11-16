@@ -95,4 +95,4 @@ for row in range(len(labelColumn)):
 
 #annotated_table["label"] = labelList
 annotated_table["entity"] = annotationList
-annotated_table.to_csv(base_dir + '/lookup/T2D_lookup.csv', quoting=csv.QUOTE_ALL, index=False)
+annotated_table.to_csv(base_dir + '/lookup/T2D_lookup_6409.csv', quoting=csv.QUOTE_ALL, index=False)
