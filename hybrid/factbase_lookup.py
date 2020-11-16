@@ -1,5 +1,8 @@
 import nltk
 from nltk.corpus import stopwords
+#from utils.kgs import DBpediaWrapper
+#from lookup.services import DBLookup, ESLookup
+#from utils.functions import simplify_string, first_sentence
 
 from data_model.lookup import ESLookupConfig
 from lookup.services import DBLookup, ESLookupFuzzy

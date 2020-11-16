@@ -1,87 +1,58 @@
-import time
 import pandas as pd
-import networkx as nx
-from gensim.models import KeyedVectors
+import pickle
+import time
 from ngram import NGram
+from tqdm.contrib.concurrent import process_map
+from kgs import KGEmbedding
 
-from factbase_lookup import sortTable, getLabelColumn
-# from hybrid.factbase_lookup import sortTable, getLabelColumn
+from functions import simplify_string, tokenize
 
-from embeddings import etp, thinOut, surfaceFormIndex_to_surfaceToEntities, save, load, \
-    generate_candidates, create_subset, disambiguate_entities, addEdges, normalizePriors, bestAnnotation, annotate
-"""from hybrid.embeddings import etp, thinOut, surfaceFormIndex_to_surfaceToEntities, save, load, \
-    generate_candidates, create_subset, disambiguate_entities, addEdges, normalizePriors, bestAnnotation, annotate"""
+from embeddings import sfi_to_ste, get_labels, generate_candidates, \
+    disambiguate_entities, add_edges, normalize_priors, thin_out, page_rank, best_annotation, annotate
 
-# base_dir = '../hybrid/'
-base_dir = '/datahdd/gpuleri/'
-# datasets = '../datasets/T2D/targets/'
-datasets = '/datahdd/gpuleri/T2D/targets/'
-target = datasets + 'T2D_embedding.csv'
 
-start = time.time()
-table = pd.read_csv(sortTable(target, 'table'))  # get targets
-labelColumn = getLabelColumn(table)  # get labels
-annotated_table = table.copy()
-annotations = []
-#surfaceToEntities = surfaceFormIndex_to_surfaceToEntities(base_dir + 'surfaceFormIndex.csv')  # convert
+def embeddings_efthy(table):
+    start = time.time()
 
-#save(surfaceToEntities, base_dir + 'surfaceToEntities.pickle')
-surfaceToEntities = load(base_dir + 'surfaceToEntities.pickle')
-print("LOAD")
-print(time.time() - start)
-#ng = NGram([surfaceForm for surfaceForm in surfaceToEntities.keys()])
-for labels in labelColumn:
-    # generate candidates
-    entity_candidates = generate_candidates(labels, surfaceToEntities, 0)  # ng
-    print("candidates")
-    print(time.time() - start)
-
-    #save(entity_candidates, base_dir + 'candidates.pickle')
-    #entity_candidates = load(base_dir + 'candidates.pickle')
-
-    # load embeddings and create disambiguation graph
-    subset = create_subset(entity_candidates,
-                           base_dir + 'dbpedia-embeddings-skipgram-300-filtered.txt',
-                           base_dir + 'dbpedia-embeddings-skipgram-300-subset.txt')
-    w2v = KeyedVectors.load_word2vec_format(subset, binary=False)
+    labels = get_labels(datasets_dir + 'tables/', table)
+    entity_candidates = generate_candidates(labels, surface_to_entities, ngram)
     disambiguation_graph, entity_candidates = disambiguate_entities(entity_candidates, w2v)
+    disambiguation_graph = add_edges(entity_candidates, disambiguation_graph)
+    priors = normalize_priors(entity_candidates)
+    disambiguation_graph.remove_edges_from(thin_out(disambiguation_graph))
+    pr = page_rank(disambiguation_graph, priors)
 
-    # add edges on the graph
-    disambiguation_graph = addEdges(entity_candidates, disambiguation_graph, w2v)
+    print(table.shape[0], time.time() - start)
+    return list(best_annotation(entity_candidates, pr))
 
-    # normalize priors
-    denominator = normalizePriors(entity_candidates)
 
-    # normalizza prob a priori
-    personalization = {node: prop['weight'] / denominator[surface_form] for surface_form in entity_candidates
-                       for (node, prop) in entity_candidates.get(surface_form).nodes(data=True)
-                       if denominator[surface_form] != 0}
+base_dir = '/datahdd/gpuleri/'
+datasets_dir = '/datahdd/gpuleri/T2D/'
+target = datasets_dir + 'targets/CEA_T2D_Targets.csv'
 
-    # calcola denominatore per cos similarity
-    """denominator = {}
-    for v1 in disambiguation_graph.nodes():
-        denominator[v1] = 0
-        for v2 in disambiguation_graph.nodes():
-            if disambiguation_graph.get_edge_data(v1, v2) is not None:
-                denominator[v1] += disambiguation_graph.get_edge_data(v1, v2)['weight']"""
+target_table = pd.read_csv(target)
+annotated_table = target_table.copy()
+tables = [table for tab_id, table in target_table.groupby('tab_id')]
+w2v = KGEmbedding.WORD2VEC
 
-    # aggiorna pesi archi
-    """for v1 in disambiguation_graph.nodes():
-        for v2 in disambiguation_graph.nodes():
-            if disambiguation_graph.get_edge_data(v1, v2) is not None:
-                disambiguation_graph.add_weighted_edges_from(
-                    [(v1, v2, etp(disambiguation_graph, v1, v2, denominator[v1]))])"""
-
-    # thin out 25% of edges
-    disambiguation_graph.remove_edges_from(thinOut(disambiguation_graph))
-
-    # pagerank
-    pageRank = nx.pagerank(disambiguation_graph, tol=1e-05, max_iter=50, alpha=0.9, personalization=personalization)
-
-    # pick the best candidate for each surface form and save all of them
-    annotations += list(bestAnnotation(entity_candidates, pageRank))
-    print("ANNOTATE")
-    print(time.time() - start)
-
+# surface_to_entities = sfi_to_ste(base_dir + 'surfaceFormIndexComplete.csv',
+#                                  base_dir + 'surfaceFormIndex.csv', w2v)  # convert
+# with open(base_dir + 'surface_to_entities.pickle', 'wb') as file:  # save
+#     pickle.dump(surface_to_entities, file, protocol=pickle.HIGHEST_PROTOCOL)
+#     file.close()
+with open(base_dir + 'surface_to_entities.pickle', 'rb') as file:  # load
+    surface_to_entities = pickle.load(file)
+    file.close()
+ngram = NGram([surface_form for surface_form in surface_to_entities.keys()])
+# with open(base_dir + 'ngram.pickle', 'wb') as file:  # save
+#     pickle.dump(ngram, file, protocol=pickle.HIGHEST_PROTOCOL)
+#     file.close()
+# with open(base_dir + 'ngram.pickle', 'rb') as file:  # load
+#     ngram = pickle.load(file)
+#     file.close()
+annotations = process_map(embeddings_efthy,
+                          tables,
+                          max_workers=10)
+annotations = [element for sublist in annotations for element in sublist]
 annotated_table["entity"] = annotations
-annotate(annotated_table, base_dir + 'annotations.csv')
+annotate(annotated_table, base_dir + 'T2D_Targets_sub/T2D_Embeddings_ngram_3S_bis_new.csv')

@@ -8,6 +8,7 @@ import numpy as np
 from dateutil.parser import parse
 from nltk.corpus import stopwords
 from nltk.tokenize import RegexpTokenizer
+from nltk.stem import PorterStemmer
 from scipy.spatial.distance import cosine
 from sklearn.preprocessing import MinMaxScaler
 
@@ -165,11 +166,14 @@ def _remove_brackets(input_str):
     return input_str
 
 
-def tokenize(sentence: str, language: str = 'english') -> List[str]:
+def tokenize(sentence: str, language: str = 'english', stemming: bool = False) -> List[str]:
     """
-    Simple preprocessing: removes punctuation and stopwords
+    Simple preprocessing: removes punctuation and stopwords and apply stemming if needed
     """
     tokenizer = RegexpTokenizer(r'\w+')
+    if stemming:
+        porter = PorterStemmer()
+        return [porter.stem(w) for w in tokenizer.tokenize(sentence.lower()) if w not in stopwords.words(language)]
     return [w for w in tokenizer.tokenize(sentence.lower()) if w not in stopwords.words(language)]
 
 
