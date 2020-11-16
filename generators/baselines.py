@@ -1,20 +1,27 @@
+import json
+import os
 from collections import Counter
+from itertools import combinations
 from typing import List, Iterable, Tuple, Any, Dict
 
+import networkx as nx
+import numpy as np
 from nltk import edit_distance
 
 from data_model.dataset import Table
-from data_model.generator import GeneratorResult, CandidateGeneratorConfig, FactBaseConfig
+from data_model.generator import GeneratorResult, CandidateGeneratorConfig, FactBaseConfig, EmbeddingOnGraphConfig, \
+    ScoredCandidate
 from generators import CandidateGenerator
 from lookup import LookupService
-from utils.functions import tokenize, simplify_string, first_sentence
-from utils.kgs import DBpediaWrapper
+from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity
+from utils.kgs import DBpediaWrapper, KGEmbedding
 
 
 class LookupGenerator(CandidateGenerator):
     """
     A generator that just forwards lookup results.
     """
+
     def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig = CandidateGeneratorConfig(0)):
         super().__init__(lookup_service, config)
 
@@ -114,7 +121,9 @@ class FactBase(CandidateGenerator):
         """
         candidates = []
         for candidate, c_labels in self._dbp.get_subjects(relation, value).items():
-            scores = sorted([(candidate, edit_distance(label, c_label)/max(len(label), len(c_label))) for c_label in c_labels], key=lambda s: s[1])
+            scores = sorted(
+                [(candidate, edit_distance(label, c_label) / max(len(label), len(c_label))) for c_label in c_labels],
+                key=lambda s: s[1])
             if scores:
                 candidates.append(scores[0])  # keep the best label for each candidate
 
@@ -187,3 +196,64 @@ class FactBase(CandidateGenerator):
                     generator_results[search_key] = GeneratorResult(search_key, [])
 
         return list(generator_results.values())
+
+
+class EmbeddingOnGraph(CandidateGenerator):
+
+    def __init__(self, lookup_service: LookupService,
+                 config: EmbeddingOnGraphConfig = EmbeddingOnGraphConfig(0, 5, 0.25)):
+        super().__init__(lookup_service, config)
+        self._dbp = DBpediaWrapper()
+        self._w2v = KGEmbedding.WORD2VEC
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
+        lookup_results = dict(self._lookup_candidates(search_keys))
+
+        # create graph vertices
+        disambiguation_graph = nx.Graph()
+        personalization = {}  # prepare dict for pagerank with normalized priors
+        embeddings = {}
+        for search_key, candidates in lookup_results.items():
+            embeddings.update(self._w2v.get_vectors(candidates))
+
+            # weight node based on their uri_count
+            weighted_candidates = sorted([(candidate, {'weight': self._dbp.get_uri_count(candidate)})
+                                          for candidate in candidates
+                                          if embeddings[candidate]],
+                                         key=lambda x: x[1]['weight'], reverse=True)
+            # get only max_candidates nodes
+            top_candidates = weighted_candidates[:self._config.max_candidates]
+            disambiguation_graph.add_nodes_from(top_candidates)
+
+            # store normalized priors
+            weights_sum = sum([x[1]['weight'] for x in weighted_candidates])
+            for candidate, props in top_candidates:
+                if candidate not in personalization:
+                    personalization[candidate] = []
+                personalization[candidate].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
+
+        # add weighted edges
+        for n1, n2 in combinations(disambiguation_graph.nodes, 2):
+            v1 = np.array(embeddings[n1])
+            v2 = np.array(embeddings[n2])
+            disambiguation_graph.add_weighted_edges_from([(n1, n2, abs(cosine_similarity(v1, v2)))])
+
+        # thin out a fraction of edges
+        thin_out = int((1 - self._config.thin_out_frac) * len(disambiguation_graph.edges.data("weight")))
+        disambiguation_graph.remove_edges_from(
+            sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
+
+        # pagerank
+        page_rank = nx.pagerank(disambiguation_graph, tol=1e-05, max_iter=50, alpha=0.9,
+                                personalization={node: np.mean(weights)
+                                                 for node, weights in personalization.items()})
+
+        # return sorted lists of candidates -> the higher the score, the better the candidate
+        return [GeneratorResult(search_key,
+                                [c.candidate for c in sorted(
+                                    [ScoredCandidate(candidate, page_rank[candidate])
+                                     for candidate in candidates if candidate in page_rank],
+                                    reverse=True)
+                                 ])
+                for search_key, candidates in lookup_results.items()]

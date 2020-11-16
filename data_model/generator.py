@@ -48,6 +48,17 @@ class FactBaseConfig(CandidateGeneratorConfig):
     pass  # TODO put parameters
 
 
+@dataclass
+class EmbeddingOnGraphConfig(CandidateGeneratorConfig):
+    max_candidates: int
+    thin_out_frac: float
+
+    def config_str(self) -> str:
+        return "__".join([super().config_str(),
+                          "max_candidates=%d" % self.max_candidates,
+                          "thin_out_frac=%.2f" % self.thin_out_frac])
+
+
 class GeneratorResult(NamedTuple):
     search_key: SearchKey
     candidates: List[str] = []
