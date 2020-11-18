@@ -10,7 +10,7 @@ from nltk import edit_distance
 
 from data_model.dataset import Table
 from data_model.generator import GeneratorResult, CandidateGeneratorConfig, FactBaseConfig, EmbeddingOnGraphConfig, \
-    ScoredCandidate
+    ScoredCandidate, HybridConfig
 from generators import CandidateGenerator
 from lookup import LookupService
 from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity
@@ -227,7 +227,9 @@ class EmbeddingOnGraph(CandidateGenerator):
             disambiguation_graph.add_nodes_from(top_candidates)
 
             # store normalized priors
-            weights_sum = sum([x[1]['weight'] for x in weighted_candidates])
+            weights_sum = sum([x[1]['weight'] for x in top_candidates])
+            # weights_sum = sum([x[1]['weight'] for x in weighted_candidates])
+
             for candidate, props in top_candidates:
                 if candidate not in personalization:
                     personalization[candidate] = []
@@ -237,7 +239,8 @@ class EmbeddingOnGraph(CandidateGenerator):
         for n1, n2 in combinations(disambiguation_graph.nodes, 2):
             v1 = np.array(embeddings[n1])
             v2 = np.array(embeddings[n2])
-            disambiguation_graph.add_weighted_edges_from([(n1, n2, abs(cosine_similarity(v1, v2)))])
+            if cosine_similarity(v1, v2) > 0:
+                disambiguation_graph.add_weighted_edges_from([(n1, n2, cosine_similarity(v1, v2))])
 
         # thin out a fraction of edges
         thin_out = int((1 - self._config.thin_out_frac) * len(disambiguation_graph.edges.data("weight")))
@@ -245,10 +248,40 @@ class EmbeddingOnGraph(CandidateGenerator):
             sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
 
         # pagerank
-        page_rank = nx.pagerank(disambiguation_graph, tol=1e-05, max_iter=50, alpha=0.9,
-                                personalization={node: np.mean(weights)
-                                                 for node, weights in personalization.items()})
+        # page_rank = nx.pagerank(disambiguation_graph, tol=1e-05, max_iter=50, alpha=0.9,
+        #                         personalization={node: np.mean(weights)
+        #                                          for node, weights in personalization.items()})
 
+        page_rank = None
+        epsilon = 1e-6
+        while page_rank is None:
+            try:
+                page_rank = nx.pagerank(disambiguation_graph, tol=epsilon, max_iter=50, alpha=0.9,
+                                        personalization={node: np.mean(weights)
+                                                         for node, weights in personalization.items()})
+            except Exception:
+                epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
+
+        # generator_results = []
+        # if results:
+        #     for search_key, candidates in results:
+        #         if not candidates:
+        #             generator_results.append(GeneratorResult(search_key,
+        #                                                      [c.candidate for c in sorted(
+        #                                                          [ScoredCandidate(candidate,
+        #                                                                           page_rank[candidate])
+        #                                                           for candidate in lookup_results.get(search_key)
+        #                                                           if candidate in page_rank], reverse=True)]))
+        #         else:
+        #             generator_results.append(GeneratorResult(search_key, candidates))
+        #
+        # for search_key, candidates in lookup_results.items():
+        #     if results:
+        #         for sk, cand in results:
+        #             if cand:
+        #                 generator_results.append(GeneratorResult(sk, cand))
+        #
+        # return generator_results
         # return sorted lists of candidates -> the higher the score, the better the candidate
         return [GeneratorResult(search_key,
                                 [c.candidate for c in sorted(
@@ -257,3 +290,37 @@ class EmbeddingOnGraph(CandidateGenerator):
                                     reverse=True)
                                  ])
                 for search_key, candidates in lookup_results.items()]
+
+
+class HybridI(CandidateGenerator):
+
+    def __init__(self, lookup_service: LookupService, config: HybridConfig = HybridConfig(0, 5, 0.25)):
+        super().__init__(lookup_service, config)
+        self._factbase = FactBase(lookup_service, config)
+        self._emb = EmbeddingOnGraph(lookup_service, config)
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        res1 = self._emb.get_candidates(table)
+        res2 = self._factbase.get_candidates(table)
+
+        dict_res = dict(res1)
+        dict_res.update(dict([res for res in res2 if res.candidates]))
+
+        return list(dict_res.items())
+
+
+class HybridII(CandidateGenerator):
+
+    def __init__(self, lookup_service: LookupService, config: HybridConfig = HybridConfig(0, 5, 0.25)):
+        super().__init__(lookup_service, config)
+        self._factbase = FactBase(lookup_service, config)
+        self._emb = EmbeddingOnGraph(lookup_service, config)
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        res1 = self._factbase.get_candidates(table)
+        res2 = self._emb.get_candidates(table)
+
+        dict_res = dict(res1)
+        dict_res.update(dict([res for res in res2 if res.candidates]))
+
+        return list(dict_res.items())

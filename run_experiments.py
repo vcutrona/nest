@@ -5,7 +5,7 @@ from annotators import CEAAnnotator
 from data_model.lookup import ESLookupFuzzyConfig, ESLookupConfig
 from datasets import DatasetEnum
 from experiments.evaluation import CEAEvaluator
-from generators.baselines import LookupGenerator, FactBase, EmbeddingOnGraph
+from generators.baselines import LookupGenerator, FactBase, EmbeddingOnGraph, HybridI, HybridII
 from generators.ours import FastBert
 from lookup.services import WikipediaSearch, ESLookupFuzzy, DBLookup, ESLookupTrigram
 
@@ -48,6 +48,18 @@ generators = {
             'args': {}
         },
     ],
+    HybridI: [
+        {
+            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
+            'args': {}
+        }
+    ],
+    HybridII: [
+            {
+                'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
+                'args': {}
+            }
+        ],
     FastBert: [
         {
             'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),

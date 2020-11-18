@@ -59,6 +59,11 @@ class EmbeddingOnGraphConfig(CandidateGeneratorConfig):
                           "thin_out_frac=%.2f" % self.thin_out_frac])
 
 
+@dataclass
+class HybridConfig(FactBaseConfig, EmbeddingOnGraphConfig):
+    pass
+
+
 class GeneratorResult(NamedTuple):
     search_key: SearchKey
     candidates: List[str] = []
