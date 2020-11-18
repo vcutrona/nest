@@ -10,7 +10,7 @@ from nltk import edit_distance
 
 from data_model.dataset import Table
 from data_model.generator import GeneratorResult, CandidateGeneratorConfig, FactBaseConfig, EmbeddingOnGraphConfig, \
-    ScoredCandidate
+    ScoredCandidate, HybridConfig
 from generators import CandidateGenerator
 from lookup import LookupService
 from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity

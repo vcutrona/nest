@@ -47,18 +47,30 @@ generators = {
             'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
             'args': {}
         },
+        {
+            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
+            'args': {}
+        },
     ],
     HybridI: [
         {
             'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
             'args': {}
-        }
+        },
+        {
+            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
+            'args': {}
+        },
     ],
     HybridII: [
         {
             'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
             'args': {}
-        }
+        },
+        {
+            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
+            'args': {}
+        },
     ],
     FastBert: [
         {
@@ -88,8 +100,8 @@ for generator, configs in generators.items():
         generator_ = generator(lookup_, **config['args'])
         annotator_ = CEAAnnotator(generator_)
         evaluator = CEAEvaluator(annotator_)
-        # res.append(evaluator.score(DatasetEnum.T2D))
-        res.append(evaluator.score_all())
+        res.append(evaluator.score(DatasetEnum.T2D))
+        # res.append(evaluator.score_all())
 
 with open(f"results_{datetime.now().strftime('%d%m%Y_%H%M%S')}", 'w', encoding='utf-8') as f:
     json.dump(res, f, ensure_ascii=False, indent=2)
