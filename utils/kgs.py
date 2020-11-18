@@ -220,6 +220,42 @@ class DBpediaWrapper:
             return doc['uri_count']
         return 0
 
+    def get_in_degree(self, uri):
+        """
+        Get the in_degree field of a ES document (from DBpedia Page Links)
+
+        :param uri: the entity URI
+        :return: the in_degree value
+        """
+        doc = self._get_es_doc_by_id(uri)
+        if 'in_degree' in doc:
+            return doc['in_degree']
+        return 0
+
+    def get_out_degree(self, uri):
+        """
+        Get the out_degree field of a ES document (from DBpedia Page Links)
+
+        :param uri: the entity URI
+        :return: the out_degree value
+        """
+        doc = self._get_es_doc_by_id(uri)
+        if 'out_degree' in doc:
+            return doc['out_degree']
+        return 0
+
+    def get_degree(self, uri):
+        """
+        Get the degree (in+out) of a ES document (from DBpedia Page Links)
+
+        :param uri: the entity URI
+        :return: the degree value
+        """
+        doc = self._get_es_doc_by_id(uri)
+        if 'out_degree' in doc and 'in_degree' in doc:
+            return doc['out_degree'] + doc['in_degree']
+        return 0
+
     def get_subjects(self, prop: str, value: str) -> Dict[str, List[str]]:
         """
         Retrieve all the subject of triples <subject, prop, value>, along with their labels.

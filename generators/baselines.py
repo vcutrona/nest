@@ -1,7 +1,7 @@
 import json
 import os
 from collections import Counter
-from itertools import combinations
+from itertools import product
 from typing import List, Iterable, Tuple, Any, Dict
 
 import networkx as nx
@@ -210,46 +210,63 @@ class EmbeddingOnGraph(CandidateGenerator):
         search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
 
-        # create graph vertices
-        disambiguation_graph = nx.Graph()
+        # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
+        disambiguation_graph = nx.DiGraph()
+        sk_nodes = {}
         personalization = {}  # prepare dict for pagerank with normalized priors
         embeddings = {}
         for search_key, candidates in lookup_results.items():
             embeddings.update(self._w2v.get_vectors(candidates))
 
-            # weight node based on their uri_count
-            weighted_candidates = sorted([(candidate, {'weight': self._dbp.get_uri_count(candidate)})
-                                          for candidate in candidates
-                                          if embeddings[candidate]],
-                                         key=lambda x: x[1]['weight'], reverse=True)
-            # get only max_candidates nodes
-            top_candidates = weighted_candidates[:self._config.max_candidates]
-            disambiguation_graph.add_nodes_from(top_candidates)
+            # Filter candidates that have an embedding in w2v.
+            nodes = sorted([(candidate, {'weight': self._dbp.get_degree(candidate)})
+                            for candidate in candidates
+                            if embeddings[candidate]],
+                           key=lambda x: x[1]['weight'], reverse=True)
 
-            # store normalized priors
-            weights_sum = sum([x[1]['weight'] for x in weighted_candidates])
-            for candidate, props in top_candidates:
-                if candidate not in personalization:
-                    personalization[candidate] = []
-                personalization[candidate].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
+            # Take only the max_candidates most relevant (highest priors probability) candidates.
+            nodes = nodes[:self._config.max_candidates]
+            disambiguation_graph.add_nodes_from(nodes)
+            sk_nodes[search_key] = nodes
 
-        # add weighted edges
-        for n1, n2 in combinations(disambiguation_graph.nodes, 2):
-            v1 = np.array(embeddings[n1])
-            v2 = np.array(embeddings[n2])
-            disambiguation_graph.add_weighted_edges_from([(n1, n2, abs(cosine_similarity(v1, v2)))])
+            # Store normalized priors
+            weights_sum = sum([x[1]['weight'] for x in nodes])
+            for node, props in nodes:
+                if node not in personalization:
+                    personalization[node] = []
+                personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
 
-        # thin out a fraction of edges
+        # Add weighted edges among the nodes in the disambiguation graph.
+        # Avoid to connect nodes in the same partition.
+        # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
+        # Only positive weights are considered.
+        for search_key, nodes in sk_nodes:
+            other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
+            for node, other_node in product(nodes, other_nodes):
+                v1 = np.array(embeddings[node])
+                v2 = np.array(embeddings[other_node])
+                cos_sim = cosine_similarity(v1, v2)
+                if cos_sim > 0:
+                    disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
+
+        # Thin out a fraction of edges which weights are the lowest
         thin_out = int((1 - self._config.thin_out_frac) * len(disambiguation_graph.edges.data("weight")))
         disambiguation_graph.remove_edges_from(
             sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
 
-        # pagerank
-        page_rank = nx.pagerank(disambiguation_graph, tol=1e-05, max_iter=50, alpha=0.9,
-                                personalization={node: np.mean(weights)
-                                                 for node, weights in personalization.items()})
+        # Page rank computaton - epsilon is increased by a factor 2 until convergence
+        page_rank = None
+        epsilon = 1e-6
+        while page_rank is None:
+            try:
+                page_rank = nx.pagerank(disambiguation_graph,
+                                        tol=epsilon, max_iter=50, alpha=0.9,
+                                        personalization={node: np.mean(weights)
+                                                         for node, weights in personalization.items()})
+            except nx.PowerIterationFailedConvergence:
+                epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
 
-        # return sorted lists of candidates -> the higher the score, the better the candidate
+        # Sort candidates -> the higher the score, the better the candidate (reverse=True)
         return [GeneratorResult(search_key,
                                 [c.candidate for c in sorted(
                                     [ScoredCandidate(candidate, page_rank[candidate])
