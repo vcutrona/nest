@@ -274,3 +274,37 @@ class EmbeddingOnGraph(CandidateGenerator):
                                     reverse=True)
                                  ])
                 for search_key, candidates in lookup_results.items()]
+
+
+class HybridI(CandidateGenerator):
+
+    def __init__(self, lookup_service: LookupService, config: HybridConfig = HybridConfig(0, 5, 0.25)):
+        super().__init__(lookup_service, config)
+        self._factbase = FactBase(lookup_service, config)
+        self._emb = EmbeddingOnGraph(lookup_service, config)
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        res1 = self._emb.get_candidates(table)
+        res2 = self._factbase.get_candidates(table)
+
+        dict_res = dict(res1)
+        dict_res.update(dict([res for res in res2 if res.candidates]))
+
+        return list(dict_res.items())
+
+
+class HybridII(CandidateGenerator):
+
+    def __init__(self, lookup_service: LookupService, config: HybridConfig = HybridConfig(0, 5, 0.25)):
+        super().__init__(lookup_service, config)
+        self._factbase = FactBase(lookup_service, config)
+        self._emb = EmbeddingOnGraph(lookup_service, config)
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        res1 = self._factbase.get_candidates(table)
+        res2 = self._emb.get_candidates(table)
+
+        dict_res = dict(res1)
+        dict_res.update(dict([res for res in res2 if res.candidates]))
+
+        return list(dict_res.items())
