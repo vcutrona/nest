@@ -26,10 +26,10 @@ for generator in [LookupGenerator, FactBase, FastBert]:
 res.append(CEAEvaluator(CEAAnnotator(EmbeddingOnGraph(es_trigram))).score(dataset))
 
 # HybridI
-res.append(CEAEvaluator(CEAAnnotator(HybridGenerator(FactBase(dblookup), EmbeddingOnGraph(es_trigram)))))
+res.append(CEAEvaluator(CEAAnnotator(HybridGenerator(FactBase(dblookup), EmbeddingOnGraph(es_trigram)))).score(dataset))
 # HybridII
-res.append(CEAEvaluator(CEAAnnotator(HybridGenerator(EmbeddingOnGraph(es_trigram), FactBase(dblookup)))))
+res.append(CEAEvaluator(CEAAnnotator(HybridGenerator(EmbeddingOnGraph(es_trigram), FactBase(dblookup)))).score(dataset))
 
 
-with open(f"results_{datetime.now().strftime('%d%m%Y_%H%M%S')}", 'w', encoding='utf-8') as f:
+with open(f"results_{datetime.now().strftime('%d%m%Y_%H%M%S')}.json", 'w', encoding='utf-8') as f:
     json.dump(res, f, ensure_ascii=False, indent=2)

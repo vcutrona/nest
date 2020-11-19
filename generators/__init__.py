@@ -230,20 +230,25 @@ class HybridGenerator(Generator):
     An HybridGenerator that executes a sequence of CandidateGenerator.
     When candidates are missing for some entries, the next CandidateGenerator is executed.
     """
-    def __init__(self, *models: CandidateGenerator):
-        self._models = models
+    def __init__(self, *generators: CandidateGenerator):
+        self._generators = generators
 
     @property
     def id(self) -> str:
-        return "_".join([self.__class__.__name__] + [model.id for model in self._models])
+        return "_".join([self.__class__.__name__] + [generator.id for generator in self._generators])
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
         res_dict = dict()
-        for model in reversed(self._models):
-            # TODO: check if it is needed to run the subsequent generator (are there any cells with no candidates?)
-            res = model.get_candidates(table)
+        empty_candidates = []
+        for generator in self._generators:
+            res = generator.get_candidates(table)
             if not res_dict:
                 res_dict = dict(res)
             else:
-                res_dict.update(dict([res for res in res if res.candidates]))
+                res_dict.update({search_key: candidates for search_key, candidates in dict(res).items()
+                                 if search_key in empty_candidates})
+            empty_candidates = [search_key for search_key, candidates in res_dict.items()
+                                if not candidates]
+            if not empty_candidates:  # no more cells to annotate
+                break
         return [GeneratorResult(search_key, candidates) for search_key, candidates in res_dict.items()]
