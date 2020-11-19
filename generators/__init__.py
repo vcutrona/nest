@@ -223,3 +223,27 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
                                                                        self._config.default_score)]))
 
         return results
+
+
+class HybridGenerator(Generator):
+    """
+    An HybridGenerator that executes a sequence of CandidateGenerator.
+    When candidates are missing for some entries, the next CandidateGenerator is executed.
+    """
+    def __init__(self, *models: CandidateGenerator):
+        self._models = models
+
+    @property
+    def id(self) -> str:
+        return "_".join([self.__class__.__name__] + [model.id for model in self._models])
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        res_dict = dict()
+        for model in reversed(self._models):
+            # TODO: check if it is needed to run the subsequent generator (are there any cells with no candidates?)
+            res = model.get_candidates(table)
+            if not res_dict:
+                res_dict = dict(res)
+            else:
+                res_dict.update(dict([res for res in res if res.candidates]))
+        return [GeneratorResult(search_key, candidates) for search_key, candidates in res_dict.items()]
