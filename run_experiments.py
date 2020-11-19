@@ -10,24 +10,24 @@ from generators.ours import FastBert
 from lookup.services import WikipediaSearch, ESLookupFuzzy, DBLookup, ESLookupTrigram
 
 generators = {
-    LookupGenerator: [
-        {
-            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (DBLookup, {}),
-            'args': {}
-        },
-        {
-            'lookup': (WikipediaSearch, {}),
-            'args': {}
-        },
-    ],
+    # LookupGenerator: [
+    #     {
+    #         'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
+    #         'args': {}
+    #     },
+    #     {
+    #         'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
+    #         'args': {}
+    #     },
+    #     {
+    #         'lookup': (DBLookup, {}),
+    #         'args': {}
+    #     },
+    #     {
+    #         'lookup': (WikipediaSearch, {}),
+    #         'args': {}
+    #     },
+    # ],
     FactBase: [
         {
             'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
@@ -72,24 +72,24 @@ generators = {
             'args': {}
         },
     ],
-    FastBert: [
-        {
-            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (DBLookup, {}),
-            'args': {}
-        },
-        {
-            'lookup': (WikipediaSearch, {}),
-            'args': {}
-        }
-    ]
+    # FastBert: [
+    #     {
+    #         'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
+    #         'args': {}
+    #     },
+    #     {
+    #         'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
+    #         'args': {}
+    #     },
+    #     {
+    #         'lookup': (DBLookup, {}),
+    #         'args': {}
+    #     },
+    #     {
+    #         'lookup': (WikipediaSearch, {}),
+    #         'args': {}
+    #     }
+    # ]
 }
 
 res = []

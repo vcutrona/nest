@@ -284,11 +284,11 @@ class HybridI(CandidateGenerator):
         self._emb = EmbeddingOnGraph(lookup_service, config)
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
-        res1 = self._emb.get_candidates(table)
-        res2 = self._factbase.get_candidates(table)
+        res1 = self._factbase.get_candidates(table)
+        res2 = self._emb.get_candidates(table)
 
-        dict_res = dict(res1)
-        dict_res.update(dict([res for res in res2 if res.candidates]))
+        dict_res = dict(res2)
+        dict_res.update(dict([res for res in res1 if res.candidates]))
 
         return list(dict_res.items())
 
@@ -301,10 +301,10 @@ class HybridII(CandidateGenerator):
         self._emb = EmbeddingOnGraph(lookup_service, config)
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
-        res1 = self._factbase.get_candidates(table)
-        res2 = self._emb.get_candidates(table)
+        res1 = self._emb.get_candidates(table)
+        res2 = self._factbase.get_candidates(table)
 
-        dict_res = dict(res1)
-        dict_res.update(dict([res for res in res2 if res.candidates]))
+        dict_res = dict(res2)
+        dict_res.update(dict([res for res in res1 if res.candidates]))
 
         return list(dict_res.items())
