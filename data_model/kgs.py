@@ -1,4 +1,4 @@
-import urllib
+from urllib.parse import unquote
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -16,8 +16,11 @@ class Entity(NamedTuple):
 
     def __eq__(self, o: object) -> bool:
         if isinstance(o, Entity):
-            return urllib.parse.unquote(self.uri).lower() == urllib.parse.unquote(o.uri).lower()
+            return unquote(self.uri).lower() == unquote(o.uri).lower()
         return False
+
+    def __hash__(self) -> int:
+        return hash(unquote(self.uri).lower())
 
 
 class Class(NamedTuple):
