@@ -61,7 +61,7 @@ class EmbeddingOnGraphConfig(CandidateGeneratorConfig):
 
 @dataclass
 class HybridConfig(FactBaseConfig, EmbeddingOnGraphConfig):
-    pass # TODO put parameters
+    pass  # TODO put parameters
 
 
 class GeneratorResult(NamedTuple):

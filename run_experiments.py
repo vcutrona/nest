@@ -100,7 +100,9 @@ for generator, configs in generators.items():
         generator_ = generator(lookup_, **config['args'])
         annotator_ = CEAAnnotator(generator_)
         evaluator = CEAEvaluator(annotator_)
-        res.append(evaluator.score(DatasetEnum.T2D))
+        score = evaluator.score(DatasetEnum.T2D)
+        print(score)
+        res.append(score)
         # res.append(evaluator.score_all())
 
 with open(f"results_{datetime.now().strftime('%d%m%Y_%H%M%S')}", 'w', encoding='utf-8') as f:
