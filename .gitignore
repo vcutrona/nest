@@ -1,13 +1,15 @@
 cache/
+datasets/*
+!datasets/*.py
 experiments/*/
 experiments/*.csv
 generators/*.json
 generators/*.hdf5
-datasets/*
-!datasets/*.py
+generators/*/
+notebooks/
 resources/
 scripts/
-*_results*.json
+*results*.json
 
 # Created by https://www.gitignore.io/api/python,virtualenv,jupyternotebooks
 # Edit at https://www.gitignore.io/?templates=python,virtualenv,jupyternotebooks
