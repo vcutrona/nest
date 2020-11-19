@@ -247,7 +247,7 @@ class CEAEvaluator:
                 results[dataset.name][cat] = self._get_scores(
                     [table for table in ann_tables if self._is_table_in_cat(table.tab_id, include, exclude)])
 
-        return {"%s_%s (%s)" % self._annotator.generator_id: results}
+        return {self._annotator.generator_id: results}
 
     def score_all(self, exclude=None):
         """

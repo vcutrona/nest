@@ -5,105 +5,28 @@ from annotators import CEAAnnotator
 from data_model.lookup import ESLookupFuzzyConfig, ESLookupConfig
 from datasets import DatasetEnum
 from experiments.evaluation import CEAEvaluator
-from generators.baselines import LookupGenerator, FactBase, EmbeddingOnGraph, HybridI, HybridII
+from generators import HybridGenerator
+from generators.baselines import LookupGenerator, FactBase, EmbeddingOnGraph
 from generators.ours import FastBert
 from lookup.services import WikipediaSearch, ESLookupFuzzy, DBLookup, ESLookupTrigram
 
-generators = {
-    # LookupGenerator: [
-    #     {
-    #         'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
-    #         'args': {}
-    #     },
-    #     {
-    #         'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
-    #         'args': {}
-    #     },
-    #     {
-    #         'lookup': (DBLookup, {}),
-    #         'args': {}
-    #     },
-    #     {
-    #         'lookup': (WikipediaSearch, {}),
-    #         'args': {}
-    #     },
-    # ],
-    FactBase: [
-        {
-            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (DBLookup, {}),
-            'args': {}
-        },
-    ],
-    EmbeddingOnGraph: [
-        {
-            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-    ],
-    HybridI: [
-        {
-            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-    ],
-    HybridII: [
-        {
-            'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-        {
-            'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
-            'args': {}
-        },
-    ],
-    # FastBert: [
-    #     {
-    #         'lookup': (ESLookupFuzzy, {'config': ESLookupFuzzyConfig('titan', 'dbpedia')}),
-    #         'args': {}
-    #     },
-    #     {
-    #         'lookup': (ESLookupTrigram, {'config': ESLookupConfig('titan', 'dbpedia')}),
-    #         'args': {}
-    #     },
-    #     {
-    #         'lookup': (DBLookup, {}),
-    #         'args': {}
-    #     },
-    #     {
-    #         'lookup': (WikipediaSearch, {}),
-    #         'args': {}
-    #     }
-    # ]
-}
-
 res = []
+dblookup = DBLookup()
+wikisearch = WikipediaSearch()
+es_fuzzy = ESLookupFuzzy(ESLookupFuzzyConfig('titan', 'dbpedia'))
+es_trigram = ESLookupTrigram(ESLookupConfig('titan', 'dbpedia'))
 
-for generator, configs in generators.items():
-    for config in configs:
-        lookup_ = config['lookup'][0](**config['lookup'][1])
-        generator_ = generator(lookup_, **config['args'])
-        annotator_ = CEAAnnotator(generator_)
-        evaluator = CEAEvaluator(annotator_)
-        score = evaluator.score(DatasetEnum.T2D)
-        print(score)
-        res.append(score)
-        # res.append(evaluator.score_all())
+dataset = DatasetEnum.T2D
+
+for generator in [LookupGenerator, FactBase, FastBert]:
+    for lookup in [es_fuzzy, es_trigram, dblookup, wikisearch]:
+        res.append(CEAEvaluator(CEAAnnotator(generator(lookup))).score(dataset))
+
+# EmbeddingOnGraph
+res.append(CEAEvaluator(CEAAnnotator(EmbeddingOnGraph(es_trigram))).score(dataset))
+
+
+
 
 with open(f"results_{datetime.now().strftime('%d%m%Y_%H%M%S')}", 'w', encoding='utf-8') as f:
     json.dump(res, f, ensure_ascii=False, indent=2)

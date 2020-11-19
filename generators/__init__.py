@@ -15,9 +15,27 @@ from utils.functions import weighting_by_ranking, truncate_string
 from utils.kgs import DBpediaWrapper
 
 
-class CandidateGenerator:
+class Generator:
     """
-    Abstract Candidate Generator.
+    An interface for Generator
+    """
+    @property
+    def id(self) -> str:
+        raise NotImplementedError
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        """
+        Candidate selection method. To be implement in all the subclasses.
+        :param table: a Table object
+        :return: a list of GeneratorResult
+        """
+        raise NotImplementedError
+
+
+class CandidateGenerator(Generator):
+    """
+    Abstract Candidate Generator. A Candidate Generator uses a LookupService for retrieving candidates,
+    then possibly computes a score to re-rank them.
     """
 
     def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig):  #, threads, chunk_size):
@@ -29,8 +47,8 @@ class CandidateGenerator:
         self._config = config
 
     @property
-    def id(self):
-        return self.__class__.__name__, self._lookup_service.__class__.__name__, self._config.config_str()
+    def id(self) -> str:
+        return "_".join([self.__class__.__name__, self._lookup_service.__class__.__name__, self._config.config_str()])
 
     def _lookup_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
@@ -93,7 +111,7 @@ class CandidateGenerator:
 
 class EmbeddingCandidateGenerator(CandidateGenerator):
     """
-    Abstract generator that re-rank candidates accordingly with vector similarities
+    Abstract generator that re-rank candidates accordingly with vector similarities.
     For each candidate, both the abstract and label embeddings are computed and then compared using
     the cosine distance measure.
     """

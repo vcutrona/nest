@@ -1,22 +1,18 @@
-import functools
 import multiprocessing as mp
-import operator
 import os
 import pickle
-from typing import List
 
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 
-from data_model.dataset import Table, Cell, Entity
+from data_model.dataset import Table, Entity
 from datasets import DatasetEnum
-from generators import CandidateGenerator, EmbeddingCandidateGenerator
-from utils.functions import chunk_list
+from generators import EmbeddingCandidateGenerator, Generator
 
 
 class CEAAnnotator:
     def __init__(self,
-                 generator: CandidateGenerator,
+                 generator: Generator,
                  threads: int = mp.cpu_count()):
         """
         :param generator:
@@ -34,7 +30,7 @@ class CEAAnnotator:
         filename = os.path.join(
                 os.path.dirname(__file__),
                 'annotations',
-                '%s_%s_%s_%s_%s.pkl' % (*self._generator.id, table.dataset_id, table.tab_id))
+                '%s_%s_%s.pkl' % (self._generator.id, table.dataset_id, table.tab_id))
 
         # check existing result
         if not os.path.exists(filename):
@@ -73,7 +69,7 @@ class CEAAnnotator:
         # targets = dataset.get_target_cells()
         # tables_filenames = []
         # target_cells = []
-        print(*self._generator.id, dataset.name)
+        print(self._generator.id, dataset.name)
         # for table in list(dataset.get_tables())[:n]:
         #     filename = os.path.join(
         #         os.path.dirname(__file__),
