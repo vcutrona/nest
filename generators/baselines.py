@@ -10,7 +10,7 @@ from nltk import edit_distance
 
 from data_model.dataset import Table
 from data_model.generator import GeneratorResult, CandidateGeneratorConfig, FactBaseConfig, EmbeddingOnGraphConfig, \
-    ScoredCandidate
+    ScoredCandidate, HybridConfig
 from generators import CandidateGenerator
 from lookup import LookupService
 from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity
@@ -274,3 +274,37 @@ class EmbeddingOnGraph(CandidateGenerator):
                                     reverse=True)
                                  ])
                 for search_key, candidates in lookup_results.items()]
+
+
+class HybridI(CandidateGenerator):
+
+    def __init__(self, lookup_service: LookupService, config: HybridConfig = HybridConfig(0, 5, 0.25)):
+        super().__init__(lookup_service, config)
+        self._factbase = FactBase(lookup_service, config)
+        self._emb = EmbeddingOnGraph(lookup_service, config)
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        res1 = self._factbase.get_candidates(table)
+        res2 = self._emb.get_candidates(table)
+
+        dict_res = dict(res2)
+        dict_res.update(dict([res for res in res1 if res.candidates]))
+
+        return list(dict_res.items())
+
+
+class HybridII(CandidateGenerator):
+
+    def __init__(self, lookup_service: LookupService, config: HybridConfig = HybridConfig(0, 5, 0.25)):
+        super().__init__(lookup_service, config)
+        self._factbase = FactBase(lookup_service, config)
+        self._emb = EmbeddingOnGraph(lookup_service, config)
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        res1 = self._emb.get_candidates(table)
+        res2 = self._factbase.get_candidates(table)
+
+        dict_res = dict(res2)
+        dict_res.update(dict([res for res in res1 if res.candidates]))
+
+        return list(dict_res.items())

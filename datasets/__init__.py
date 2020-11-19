@@ -29,6 +29,7 @@ class DatasetEnum(Enum):
     ST19_Round4 = 'Round4'
     TT = '2T'
     T2D = 'T2D'
+    T2D_sub = 'T2D_subset'
 
     def _target_path(self, task):
         return f"{os.path.dirname(__file__)}/{self.value}/targets/{task}_{self.value}_Targets.csv"
