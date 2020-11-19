@@ -227,7 +227,7 @@ class EmbeddingOnGraph(CandidateGenerator):
             # Take only the max_candidates most relevant (highest priors probability) candidates.
             nodes = nodes[:self._config.max_candidates]
             disambiguation_graph.add_nodes_from(nodes)
-            sk_nodes[search_key] = nodes
+            sk_nodes[search_key] = [n[0] for n in nodes]
 
             # Store normalized priors
             weights_sum = sum([x[1]['weight'] for x in nodes])
@@ -240,7 +240,7 @@ class EmbeddingOnGraph(CandidateGenerator):
         # Avoid to connect nodes in the same partition.
         # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
         # Only positive weights are considered.
-        for search_key, nodes in sk_nodes:
+        for search_key, nodes in sk_nodes.items():
             other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
             for node, other_node in product(nodes, other_nodes):
                 v1 = np.array(embeddings[node])
