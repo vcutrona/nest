@@ -46,6 +46,14 @@ class ESLookupFuzzyConfig(ESLookupConfig):
 
 
 @dataclass
+class ESLookupTrigramConfig(ESLookupConfig):
+    min_match: str = '82%'
+
+    def cache_dir(self):
+        return "index=%s__size=%d__min_match=%s" % (self.index, self.size, self.min_match)
+
+
+@dataclass
 class WikipediaSearchConfig(LookupServiceConfig):
     url: str
     limit: int = 10

@@ -1,10 +1,9 @@
-import urllib.parse
-
 import requests
 from elasticsearch import Elasticsearch, TransportError
 from elasticsearch_dsl import Q, Search
 
-from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig, ESLookupFuzzyConfig
+from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig, ESLookupFuzzyConfig, \
+    ESLookupTrigramConfig
 from lookup import LookupService
 
 
@@ -49,7 +48,7 @@ class ESLookup(LookupService):
 
 
 class ESLookupFuzzy(ESLookup):
-    def __init__(self, config: ESLookupFuzzyConfig = ESLookupFuzzyConfig('localhost', 'dbpedia-ngram')):
+    def __init__(self, config: ESLookupFuzzyConfig = ESLookupFuzzyConfig('localhost', 'dbpedia')):
         super().__init__(config)
 
     def _query(self, label):
@@ -70,15 +69,22 @@ class ESLookupFuzzy(ESLookup):
 
 
 class ESLookupTrigram(ESLookup):
-    def __init__(self, config: ESLookupConfig = ESLookupConfig('localhost', 'dbpedia-ngram')):
+    def __init__(self, config: ESLookupTrigramConfig = ESLookupTrigramConfig('localhost', 'dbpedia')):
         super().__init__(config)
 
     def _query(self, label):
         return Q('bool',
-                 must=[Q('multi_match',
-                         query=str(label).lower(),
-                         fields=['surface_form_keyword.ngram'])
-                       ])
+                 should=[Q('bool',
+                           must=[Q('match_phrase', surface_form_keyword={'query': str(label).lower()})],
+                           should=[Q('match_phrase', description={'query': str(label).lower()})]
+                           ),
+                         Q('bool',
+                           should=[
+                               Q('match', surface_form_keyword__ngram={'query': str(label).lower(),
+                                                                       'minimum_should_match': self._config.min_match})]
+                           )
+                         ]
+                 )
 
 
 class WikipediaSearch(LookupService):
