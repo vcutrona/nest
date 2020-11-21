@@ -25,6 +25,7 @@ for generator in [LookupGenerator, FactBase, FastBert]:
         res.append(CEAEvaluator(CEAAnnotator(generator(es_exact, lookup))).score(dataset))
         print(res[-1])
     for lookup in [dblookup, wikisearch]:
+        res.append(CEAEvaluator(CEAAnnotator(generator(lookup))).score(dataset))
         print(res[-1])
 
 # EmbeddingOnGraph

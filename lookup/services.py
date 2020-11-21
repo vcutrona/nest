@@ -74,10 +74,10 @@ class ESLookupFuzzy(ESLookup):
         return Q('bool',
                  minimum_should_match=1,
                  should=[
+                     Q('terms', surface_form_keyword__keyword=[label, label.lower()], boost=15),
+                     Q('terms', description__keyword=[label, label.lower()], boost=3),
                      Q({"fuzzy": {"surface_form_keyword": q}}),
-                     Q({"fuzzy": {"description": q}}),
-                     Q('terms', surface_form_keyword__keyword=[label, label.lower()], boost=7),
-                     Q('terms', description__keyword=[label, label.lower()], boost=2)
+                     Q({"fuzzy": {"description": q}})
                  ])
 
 
