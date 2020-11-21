@@ -62,10 +62,13 @@ class ESLookupFuzzy(ESLookup):
             q['max_expansions'] = self._config.max_expansions
 
         return Q('bool',
-                 should=[Q('match', description=str(label).lower()),
-                         Q('multi_match', query=str(label).lower(), fields=['surface_form_keyword'], boost=5),
-                         Q({"fuzzy": {"surface_form_keyword": q}})
-                         ])
+                 minimum_should_match=1,
+                 should=[
+                     Q({"fuzzy": {"surface_form_keyword": q}}),
+                     Q({"fuzzy": {"description": q}}),
+                     Q('terms', surface_form_keyword__keyword=[label, label.lower()], boost=7),
+                     Q('terms', description__keyword=[label, label.lower()], boost=2)
+                 ])
 
 
 class ESLookupTrigram(ESLookup):
@@ -73,18 +76,8 @@ class ESLookupTrigram(ESLookup):
         super().__init__(config)
 
     def _query(self, label):
-        return Q('bool',
-                 should=[Q('bool',
-                           must=[Q('match_phrase', surface_form_keyword={'query': str(label).lower()})],
-                           should=[Q('match_phrase', description={'query': str(label).lower()})]
-                           ),
-                         Q('bool',
-                           should=[
-                               Q('match', surface_form_keyword__ngram={'query': str(label).lower(),
-                                                                       'minimum_should_match': self._config.min_match})]
-                           )
-                         ]
-                 )
+        return Q('match', surface_form_keyword__ngram={'query': str(label).lower(),
+                                                       'minimum_should_match': self._config.min_match})
 
 
 class WikipediaSearch(LookupService):

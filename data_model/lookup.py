@@ -27,7 +27,7 @@ class LookupServiceConfig:
 class ESLookupConfig(LookupServiceConfig):
     host: str
     index: str
-    size: int = 10
+    size: int = 25
     enable_cache: bool = True
 
     def cache_dir(self):
