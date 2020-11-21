@@ -10,8 +10,8 @@ from nltk import edit_distance
 
 from data_model.dataset import Table
 from data_model.generator import GeneratorResult, CandidateGeneratorConfig, FactBaseConfig, EmbeddingOnGraphConfig, \
-    ScoredCandidate, HybridConfig
-from generators import CandidateGenerator, HybridGenerator
+    ScoredCandidate
+from generators import CandidateGenerator
 from lookup import LookupService
 from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity
 from utils.kgs import DBpediaWrapper, KGEmbedding
@@ -22,8 +22,8 @@ class LookupGenerator(CandidateGenerator):
     A generator that just forwards lookup results.
     """
 
-    def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig = CandidateGeneratorConfig(0)):
-        super().__init__(lookup_service, config)
+    def __init__(self, *lookup_services: LookupService, config: CandidateGeneratorConfig = CandidateGeneratorConfig(0)):
+        super().__init__(*lookup_services, config=config)
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
         """
@@ -36,8 +36,8 @@ class LookupGenerator(CandidateGenerator):
 
 
 class FactBase(CandidateGenerator):
-    def __init__(self, lookup_service: LookupService, config: FactBaseConfig = FactBaseConfig(0)):
-        super().__init__(lookup_service, config)
+    def __init__(self, *lookup_services: LookupService, config: FactBaseConfig = FactBaseConfig(0)):
+        super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
 
     def _get_description_tokens(self, uri: str) -> List[str]:
@@ -200,9 +200,9 @@ class FactBase(CandidateGenerator):
 
 class EmbeddingOnGraph(CandidateGenerator):
 
-    def __init__(self, lookup_service: LookupService,
+    def __init__(self, *lookup_services: LookupService,
                  config: EmbeddingOnGraphConfig = EmbeddingOnGraphConfig(0, 5, 0.25)):
-        super().__init__(lookup_service, config)
+        super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
         self._w2v = KGEmbedding.WORD2VEC
 

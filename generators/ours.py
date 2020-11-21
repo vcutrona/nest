@@ -17,11 +17,11 @@ class FastElmo(EmbeddingCandidateGenerator):
     A method to re-rank candidates accordingly with vector similarities, based on the ELMO embeddings.
     """
 
-    def __init__(self, lookup_service: LookupService,
+    def __init__(self, *lookup_services: LookupService,
                  config=EmbeddingCandidateGeneratorConfig(max_subseq_len=0,
                                                           abstract='short',
                                                           abstract_max_tokens=15)):
-        super().__init__(lookup_service, config)  # , threads=1, chunk_size=10000)  # force single-process execution
+        super().__init__(*lookup_services, config=config)
         self._model = ElmoEmbedder(cuda_device=0,
                                    weight_file=os.path.join(os.path.dirname(__file__),
                                                             'elmo_2x4096_512_2048cnn_2xhighway_weights.hdf5'),
@@ -82,9 +82,9 @@ class FastBert(EmbeddingCandidateGenerator):
     A method to re-rank candidates accordingly with vector similarities, based on the BERT embeddings.
     """
 
-    def __init__(self, lookup_service: LookupService,
+    def __init__(self, *lookup_services: LookupService,
                  config: FastBertConfig = FastBertConfig(max_subseq_len=0, abstract='short', abstract_max_tokens=512)):
-        super().__init__(lookup_service, config)  #, threads=1, chunk_size=10000)  # force single-process execution
+        super().__init__(*lookup_services, config=config)
         self._model = SentenceTransformer('bert-base-nli-mean-tokens')
 
     def _embed_search_keys(self, search_keys: List[SearchKey]) -> List[Embedding]:

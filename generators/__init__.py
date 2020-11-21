@@ -19,6 +19,7 @@ class Generator:
     """
     An interface for Generator
     """
+
     @property
     def id(self) -> str:
         raise NotImplementedError
@@ -34,21 +35,21 @@ class Generator:
 
 class CandidateGenerator(Generator):
     """
-    Abstract Candidate Generator. A Candidate Generator uses a LookupService for retrieving candidates,
-    then possibly computes a score to re-rank them.
+    Abstract Candidate Generator.
+    A Candidate Generator uses a bunch of LookupService object for retrieving candidates; if candidates are missing
+    for a key, the subsequent LookupService is used.
     """
 
-    def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig):  #, threads, chunk_size):
-        # assert threads > 0
-        # self._threads = threads
-        # self._chunk_size = chunk_size
+    def __init__(self, *lookup_services: LookupService, config: CandidateGeneratorConfig):
 
-        self._lookup_service = lookup_service
+        self._lookup_services = lookup_services
         self._config = config
 
     @property
     def id(self) -> str:
-        return "_".join([self.__class__.__name__, self._lookup_service.__class__.__name__, self._config.config_str()])
+        return "_".join([self.__class__.__name__] +
+                        [lookup_service.__class__.__name__ for lookup_service in self._lookup_services] +
+                        [self._config.config_str()])
 
     def _lookup_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
@@ -56,12 +57,18 @@ class CandidateGenerator(Generator):
         :param search_keys: a list of SearchKeys
         :return: a list of LookupResult
         """
-        labels = [search_key.label for search_key in search_keys]
-        if self._config.max_subseq_len and self._config.max_subseq_len > 0:
-            lookup_results = dict(self._lookup_service.lookup_subsequences(labels,
-                                                                           self._config.max_subseq_len))
-        else:
-            lookup_results = dict(self._lookup_service.lookup(labels))
+        lookup_results = {}
+        for lookup_service in self._lookup_services:
+            labels = [search_key.label for search_key in search_keys
+                      if search_key.label not in lookup_results or not lookup_results[search_key.label]]
+            if not labels:
+                break
+            
+            if self._config.max_subseq_len and self._config.max_subseq_len > 0:
+                lookup_results.update(dict(lookup_service.lookup_subsequences(labels, self._config.max_subseq_len)))
+            else:
+                lookup_results.update(dict(lookup_service.lookup(labels)))
+
         return [GeneratorResult(search_key, lookup_results[search_key.label]) for search_key in search_keys]
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
@@ -72,42 +79,6 @@ class CandidateGenerator(Generator):
         """
         raise NotImplementedError
 
-    # def multi_search(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
-    #     """
-    #     Parallel candidate retrieval execution
-    #     :param search_keys: a list of search keys
-    #     :return: a list of GeneratorResult
-    #     """
-    #     # TODO the function should get a list of tables as input, not the list of search keys
-    #     if self._threads > 1:
-    #         results = functools.reduce(operator.iconcat,
-    #                                    process_map(self.select_candidates,
-    #                                                list(chunk_list(search_keys, self._chunk_size)),
-    #                                                max_workers=self._threads),
-    #                                    [])
-    #
-    #     else:  # avoid CUDA re-initialization in forked subprocess
-    #         results = []
-    #         for search_keys_chunk in tqdm(chunk_list(search_keys, self._chunk_size)):
-    #             results += self.select_candidates(search_keys_chunk)
-    #
-    #     return results
-    #
-    # def search(self, search_key: SearchKey) -> List[GeneratorResult]:
-    #     """
-    #     Commodity method to perform a single query
-    #     :param search_key: a search key
-    #     :return: a list of GeneratorResult
-    #     """
-    #     return self.multi_search([search_key])
-
-
-# class ParallelCandidateGenerator(CandidateGenerator, ABC):
-#     def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig, threads, chunk_size):
-#         super().__init__(lookup_service, config)
-#         self._threads = threads
-#         self._chunk_size = chunk_size
-
 
 class EmbeddingCandidateGenerator(CandidateGenerator):
     """
@@ -116,8 +87,8 @@ class EmbeddingCandidateGenerator(CandidateGenerator):
     the cosine distance measure.
     """
 
-    def __init__(self, lookup_service: LookupService, config: EmbeddingCandidateGeneratorConfig):  #, threads, chunk_size):
-        super().__init__(lookup_service, config)  #, threads, chunk_size)
+    def __init__(self, *lookup_services: LookupService, config: EmbeddingCandidateGeneratorConfig):
+        super().__init__(*lookup_services, config=config)
 
         self._abstract_helper = DBpediaWrapper()
         self._cache = Cache(
@@ -230,6 +201,7 @@ class HybridGenerator(Generator):
     An HybridGenerator that executes a sequence of CandidateGenerator.
     When candidates are missing for some entries, the next CandidateGenerator is executed.
     """
+
     def __init__(self, *generators: CandidateGenerator):
         self._generators = generators
 
