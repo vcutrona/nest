@@ -3,7 +3,7 @@ from elasticsearch import Elasticsearch, TransportError
 from elasticsearch_dsl import Q, Search
 
 from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig, ESLookupFuzzyConfig, \
-    ESLookupTrigramConfig
+    ESLookupTrigramConfig, ESLookupExactConfig
 from lookup import LookupService
 
 
@@ -45,6 +45,16 @@ class ESLookup(LookupService):
 
     def _query(self, label):
         raise NotImplementedError
+
+
+class ESLookupExact(ESLookup):
+    def __init__(self, config: ESLookupExactConfig = ESLookupExactConfig('localhost', 'dbpedia')):
+        super().__init__(config)
+
+    def _query(self, label):
+        return Q('bool',
+                 must=[Q('terms', surface_form_keyword__keyword=[label, label.lower()])],
+                 )
 
 
 class ESLookupFuzzy(ESLookup):

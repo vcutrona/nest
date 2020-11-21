@@ -35,6 +35,11 @@ class ESLookupConfig(LookupServiceConfig):
 
 
 @dataclass
+class ESLookupExactConfig(ESLookupConfig):
+    size: int = 10000
+
+
+@dataclass
 class ESLookupFuzzyConfig(ESLookupConfig):
     fuzziness: Optional[int] = 2
     prefix_length: Optional[int] = 0
