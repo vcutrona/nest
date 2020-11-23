@@ -31,9 +31,6 @@ class DatasetEnum(Enum):
     TT = '2T'
     T2D = 'T2D'
 
-    def _target_path(self, task):
-        return f"{os.path.dirname(__file__)}/{self.value}/targets/{task}_{self.value}_Targets.csv"
-
     def _gt_path(self, task):
         return f"{os.path.dirname(__file__)}/{self.value}/gt/{task}_{self.value}_gt.csv"
 
@@ -46,6 +43,7 @@ class DatasetEnum(Enum):
     def total_tables(self):
         cea = pd.read_csv(self._gt_path('CEA'),
                           names=['tab_id', 'col_id', 'row_id', 'entities'],
+                          dtype={'tab_id': str, 'col_id': int, 'row_id': int, 'entities': str},
                           usecols=['tab_id'])
         return len(cea['tab_id'].unique())
 
@@ -131,8 +129,10 @@ class DatasetEnum(Enum):
         if os.path.exists(from_dataset._gt_path('CTA')):
             cta = pd.read_csv(from_dataset._gt_path('CTA'),
                               names=['tab_id', 'col_id', 'types'],
-                              dtype={'tab_id': str, 'col_id': int, 'types': str})
-            cta['types'] = cta['types'].apply(str.split)
+                              dtype={'tab_id': str, 'col_id': int, 'perfect': str, 'okay': str},
+                              keep_default_na=False)  # the "okay" value might be empty
+            cta['perfect'] = cta['perfect'].apply(str.split)
+            cta['okay'] = cta['okay'].apply(str.split)
             cta_groups = cta.groupby('tab_id')
         cpa_groups = None
         if os.path.exists(from_dataset._gt_path('CPA')):
@@ -150,7 +150,7 @@ class DatasetEnum(Enum):
             if cta_groups and tab_id in cta_groups.groups:
                 cta_group = cta_groups.get_group(tab_id)
                 cta_group = cta_group[cta_group['col_id'].isin(cea_group['col_id'].unique())]
-                table.set_gt_column_annotations(zip(cta_group['col_id'], cta_group['types']))
+                table.set_gt_column_annotations(zip(cta_group['col_id'], cta_group['perfect'], cta_group['okay']))
             if cpa_groups and tab_id in cpa_groups.groups:
                 cpa_group = cpa_groups.get_group(tab_id)
                 cpa_group = cpa_group[(cpa_group['source_id'].isin(cea_group['col_id'].unique()))
