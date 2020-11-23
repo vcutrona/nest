@@ -41,7 +41,8 @@ class CellAnnotation(NamedTuple):
 
 class ColumnAnnotation(NamedTuple):
     column: Column
-    classes: List[Class]
+    classes_perfect: List[Class]
+    classes_okay: List[Class]
 
 
 class PropertyAnnotation(NamedTuple):
@@ -166,7 +167,7 @@ class Table:
                                                                             [Entity(e) for e in triple[2]])
                                                              for triple in triples]}
 
-    def set_gt_column_annotations(self, pairs: Iterable[Tuple[int, List[str]]]):
+    def set_gt_column_annotations(self, pairs: Iterable[Tuple[int, List[str], List[str]]]):
         """
         Utility method that sets all the column annotations for the GT
         :param pairs: a list of pairs (col_id, List(types_list))
@@ -174,7 +175,8 @@ class Table:
         """
         self._gt_column_annotations = {col_annotation.column: col_annotation
                                        for col_annotation in [ColumnAnnotation(Column(pair[0]),
-                                                                               [Class(e) for e in pair[1]])
+                                                                               [Class(e) for e in pair[1]],
+                                                                               [Class(e) for e in pair[2]])
                                                               for pair in pairs]}
 
     def set_gt_property_annotations(self, triples: Iterable[Tuple[int, int, List[str]]]):

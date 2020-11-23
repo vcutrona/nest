@@ -1,4 +1,5 @@
 import os
+import pickle
 from enum import Enum
 
 import pandas as pd
@@ -39,7 +40,16 @@ class DatasetEnum(Enum):
     def _table_path(self, tab_id):
         return f"{os.path.dirname(__file__)}/{self.value}/tables/{tab_id}.csv"
 
-    def get_tables(self):
+    def _pickle_table_folder_path(self):
+        return f"{os.path.dirname(__file__)}/{self.value}/pkl"
+
+    def total_tables(self):
+        cea = pd.read_csv(self._gt_path('CEA'),
+                          names=['tab_id', 'col_id', 'row_id', 'entities'],
+                          usecols=['tab_id'])
+        return len(cea['tab_id'].unique())
+
+    def _tables_to_pkl(self):
         cea = pd.read_csv(self._gt_path('CEA'),
                           names=['tab_id', 'col_id', 'row_id', 'entities'],
                           dtype={'tab_id': str, 'col_id': int, 'row_id': int, 'entities': str})
@@ -47,9 +57,11 @@ class DatasetEnum(Enum):
         cta_groups = None
         if os.path.exists(self._gt_path('CTA')):
             cta = pd.read_csv(self._gt_path('CTA'),
-                              names=['tab_id', 'col_id', 'types'],
-                              dtype={'tab_id': str, 'col_id': int, 'types': str})
-            cta['types'] = cta['types'].apply(str.split)
+                              names=['tab_id', 'col_id', 'perfect', 'okay'],
+                              dtype={'tab_id': str, 'col_id': int, 'perfect': str, 'okay': str},
+                              keep_default_na=False)  # the "okay" value might be empty
+            cta['perfect'] = cta['perfect'].apply(str.split)
+            cta['okay'] = cta['okay'].apply(str.split)
             cta_groups = cta.groupby('tab_id')
         cpa_groups = None
         if os.path.exists(self._gt_path('CPA')):
@@ -65,14 +77,25 @@ class DatasetEnum(Enum):
             table.set_gt_cell_annotations(zip(cea_group['row_id'], cea_group['col_id'], cea_group['entities']))
             if cta_groups and tab_id in cta_groups.groups:
                 cta_group = cta_groups.get_group(tab_id)
-                table.set_gt_column_annotations(zip(cta_group['col_id'], cta_group['types']))
+                table.set_gt_column_annotations(zip(cta_group['col_id'], cta_group['perfect'], cta_group['okay']))
             if cpa_groups and tab_id in cpa_groups.groups:
                 cpa_group = cpa_groups.get_group(tab_id)
                 table.set_gt_property_annotations(zip(cpa_group['source_id'],
                                                       cpa_group['target_id'],
                                                       cpa_group['properties']))
 
-            yield table
+            pickle.dump(table, open(f"{self._pickle_table_folder_path()}/{table.tab_id}.pkl", 'wb'))
+
+    def get_tables(self):
+        # Precompute tables
+        if not os.listdir(self._pickle_table_folder_path()):
+            self._tables_to_pkl()
+
+        # Load tables from pickle files
+        with os.scandir(self._pickle_table_folder_path()) as it:
+            for entry in it:
+                if entry.name.endswith(".pkl") and entry.is_file():
+                    yield pickle.load(open(entry.path, 'rb'))
 
     def get_table_categories(self):
         """
