@@ -13,14 +13,14 @@ from generators import EmbeddingCandidateGenerator, Generator
 class CEAAnnotator:
     def __init__(self,
                  generator: Generator,
-                 threads: int = mp.cpu_count()):
+                 max_workers: int = mp.cpu_count()):
         """
         :param generator:
-        :param threads: max number of threads used to parallelize the annotation
+        :param max_workers: max number of workers used to parallelize the annotation
         """
-        assert threads > 0
+        assert max_workers > 0
         self._generator = generator
-        self._threads = threads
+        self._max_workers = max_workers
 
     @property
     def generator_id(self):
@@ -66,39 +66,18 @@ class CEAAnnotator:
         :param dataset: CEA dataset to annotate
         :return:
         """
-        # targets = dataset.get_target_cells()
-        # tables_filenames = []
-        # target_cells = []
         print(self._generator.id, dataset.name)
-        # for table in list(dataset.get_tables())[:n]:
-        #     filename = os.path.join(
-        #         os.path.dirname(__file__),
-        #         'annotations',
-        #         '%s_%s_%s_%s_%s.pkl' % (*self._generator.id, dataset.name, table.tab_id))
-        #     if table.tab_id in targets:
-        #         tables.append(table)
-        #         target_cells.append(targets[table.tab_id])
-        #         tables_filenames.append(filename)
 
-        # threads = self._threads if self._micro_table_size <= 0 else int(self._threads / 2)
         tables = dataset.get_tables()
         total_tables = dataset.total_tables()
-        # Do not parallelize CUDA executions
-        if isinstance(self._generator, EmbeddingCandidateGenerator):
+        if self._max_workers == 1:  # Do not parallelize
             new_annotated_tables = []
             for table in tqdm(tables, total=total_tables):
                 new_annotated_tables.append(self.annotate_table(table))
         else:  # Parallelize: 1 table per process
             new_annotated_tables = process_map(self.annotate_table,
                                                tables,
-                                               max_workers=self._threads,
+                                               max_workers=self._max_workers,
                                                total=total_tables)
-
-        # for ann_table in new_annotated_tables:
-        #     filename = os.path.join(
-        #         os.path.dirname(__file__),
-        #         'annotations',
-        #         '%s_%s_%s_%s_%s.pkl' % (*self._generator.id, dataset.name, ann_table.tab_id))
-        #     pickle.dump(ann_table, open(filename, 'wb'))
 
         return new_annotated_tables

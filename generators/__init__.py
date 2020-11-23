@@ -40,8 +40,7 @@ class CandidateGenerator(Generator):
     for a key, the subsequent LookupService is used.
     """
 
-    def __init__(self, *lookup_services: LookupService, config: CandidateGeneratorConfig):
-
+    def __init__(self, *lookup_services: LookupService, config):
         self._lookup_services = lookup_services
         self._config = config
 
