@@ -15,6 +15,12 @@ class CandidateGeneratorConfig:
 
 
 @dataclass
+class LookupGeneratorConfig(CandidateGeneratorConfig):
+    max_workers: int = 1
+    chunk_size: Optional[int] = None
+
+
+@dataclass
 class EmbeddingCandidateGeneratorConfig(CandidateGeneratorConfig):
     abstract: str
     abstract_max_tokens: int

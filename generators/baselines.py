@@ -1,6 +1,9 @@
+import functools
 import json
+import operator
 import os
 from collections import Counter
+from concurrent.futures.process import ProcessPoolExecutor
 from itertools import product
 from typing import List, Iterable, Tuple, Any, Dict
 
@@ -9,11 +12,11 @@ import numpy as np
 from nltk import edit_distance
 
 from data_model.dataset import Table
-from data_model.generator import GeneratorResult, CandidateGeneratorConfig, FactBaseConfig, EmbeddingOnGraphConfig, \
-    ScoredCandidate
+from data_model.generator import GeneratorResult, FactBaseConfig, EmbeddingOnGraphConfig, ScoredCandidate, \
+    LookupGeneratorConfig
 from generators import CandidateGenerator
 from lookup import LookupService
-from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity
+from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity, chunk_list
 from utils.kgs import DBpediaWrapper, KGEmbedding
 
 
@@ -22,7 +25,7 @@ class LookupGenerator(CandidateGenerator):
     A generator that just forwards lookup results.
     """
 
-    def __init__(self, *lookup_services: LookupService, config: CandidateGeneratorConfig = CandidateGeneratorConfig(0)):
+    def __init__(self, *lookup_services: LookupService, config: LookupGeneratorConfig):
         super().__init__(*lookup_services, config=config)
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
@@ -32,7 +35,15 @@ class LookupGenerator(CandidateGenerator):
         :return: a list of GeneratorResult
         """
         search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
-        return self._lookup_candidates(search_keys)
+        if self._config.max_workers == 1:
+            return self._lookup_candidates(search_keys)
+
+        # Parallelize at cell level (no dependencies between cells in the same col/row)
+        return functools.reduce(operator.iconcat,
+                                ProcessPoolExecutor(self._config.max_workers).map(self._lookup_candidates,
+                                                                                  chunk_list(search_keys,
+                                                                                             self._config.chunk_size)),
+                                [])
 
 
 class FactBase(CandidateGenerator):
@@ -201,7 +212,9 @@ class FactBase(CandidateGenerator):
 class EmbeddingOnGraph(CandidateGenerator):
 
     def __init__(self, *lookup_services: LookupService,
-                 config: EmbeddingOnGraphConfig = EmbeddingOnGraphConfig(0, 5, 0.25)):
+                 config: EmbeddingOnGraphConfig = EmbeddingOnGraphConfig(max_subseq_len=0,
+                                                                         max_candidates=5,
+                                                                         thin_out_frac=0.25)):
         super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
         self._w2v = KGEmbedding.WORD2VEC

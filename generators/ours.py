@@ -83,7 +83,9 @@ class FastBert(EmbeddingCandidateGenerator):
     """
 
     def __init__(self, *lookup_services: LookupService,
-                 config: FastBertConfig = FastBertConfig(max_subseq_len=0, abstract='short', abstract_max_tokens=512)):
+                 config: FastBertConfig = FastBertConfig(max_subseq_len=0,
+                                                         abstract='short',
+                                                         abstract_max_tokens=512)):
         super().__init__(*lookup_services, config=config)
         self._model = SentenceTransformer('bert-base-nli-mean-tokens')
 
