@@ -229,7 +229,7 @@ class CEAEvaluator:
     #
     #     return {"%s_%s (%s)" % self._generator.id: results}
 
-    def _score(self, datasets):
+    def score(self, datasets):
         """
         Compute Precision, Recall and F1 measures.
         :param datasets: the list of testing datasets on which to test the generator
@@ -258,12 +258,12 @@ class CEAEvaluator:
         """
         if exclude is None:
             exclude = []
-        return self._score(filter(lambda x: x not in exclude, DatasetEnum))
+        return self.score(filter(lambda x: x not in exclude, DatasetEnum))
 
-    def score(self, gt):
+    def score_one(self, gt):
         """
         Helper method to test a single dataset of the benchmark.
         :return: a dictionary Dict(generator_id, results), where results is a dict which contains scores grouped
                  by tables categories.
         """
-        return self._score([gt])
+        return self.score([gt])

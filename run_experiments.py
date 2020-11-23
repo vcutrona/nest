@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 
 from annotators import CEAAnnotator
-from data_model.lookup import ESLookupFuzzyConfig, ESLookupTrigramConfig, ESLookupConfig, ESLookupExactConfig
+from data_model.lookup import ESLookupFuzzyConfig, ESLookupTrigramConfig, ESLookupExactConfig
 from datasets import DatasetEnum
 from experiments.evaluation import CEAEvaluator
 from generators import HybridGenerator
@@ -15,14 +15,14 @@ dblookup = DBLookup()
 wikisearch = WikipediaSearch()
 es_fuzzy = ESLookupFuzzy(ESLookupFuzzyConfig('titan', 'dbpedia'))
 es_trigram = ESLookupTrigram(ESLookupTrigramConfig('titan', 'dbpedia'))
-es_exact = ESLookupExact(ESLookupExactConfig('titan', 'dbpedia'))
+es_exact = ESLookupExact(ESLookupExactConfig('titan', 'dbpedia', 25))
 
-dataset = DatasetEnum.T2D
+dataset = [DatasetEnum.TT, DatasetEnum.T2D]
 
 # Lookup, FactBase, FastBert
-for generator in [LookupGenerator, FactBase, FastBert]:
+for generator in [LookupGenerator, FactBase]:
     for lookup in [es_fuzzy, es_trigram]:
-        res.append(CEAEvaluator(CEAAnnotator(generator(es_exact, lookup))).score(dataset))
+        res.append(CEAEvaluator(CEAAnnotator(generator(es_exact, lookup), threads=3)).score(dataset))
         print(res[-1])
     for lookup in [dblookup, wikisearch]:
         res.append(CEAEvaluator(CEAAnnotator(generator(lookup))).score(dataset))
@@ -35,6 +35,8 @@ print(res[-1])
 # HybridI
 res.append(CEAEvaluator(CEAAnnotator(HybridGenerator(FactBase(dblookup),
                                                      EmbeddingOnGraph(es_exact, es_trigram)))).score(dataset))
+print(res[-1])
+
 # HybridII
 res.append(CEAEvaluator(CEAAnnotator(HybridGenerator(EmbeddingOnGraph(es_exact, es_trigram),
                                                      FactBase(dblookup)))).score(dataset))
