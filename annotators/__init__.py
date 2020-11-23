@@ -81,16 +81,18 @@ class CEAAnnotator:
         #         tables_filenames.append(filename)
 
         # threads = self._threads if self._micro_table_size <= 0 else int(self._threads / 2)
-        tables = list(dataset.get_tables())
+        tables = dataset.get_tables()
+        total_tables = dataset.total_tables()
         # Do not parallelize CUDA executions
         if isinstance(self._generator, EmbeddingCandidateGenerator):
             new_annotated_tables = []
-            for table in tqdm(tables):
+            for table in tqdm(tables, total=total_tables):
                 new_annotated_tables.append(self.annotate_table(table))
         else:  # Parallelize: 1 table per process
             new_annotated_tables = process_map(self.annotate_table,
                                                tables,
-                                               max_workers=self._threads)
+                                               max_workers=self._threads,
+                                               total=total_tables)
 
         # for ann_table in new_annotated_tables:
         #     filename = os.path.join(
