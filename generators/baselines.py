@@ -1,7 +1,5 @@
 import functools
-import json
 import operator
-import os
 from collections import Counter
 from concurrent.futures.process import ProcessPoolExecutor
 from itertools import product
@@ -221,6 +219,7 @@ class FactBase(CandidateGenerator):
             if cell.col_id not in col_search_keys:
                 col_search_keys[cell.col_id] = []
             col_search_keys[cell.col_id].append(table.get_search_key(cell))
+
         if self._config.max_workers == 1:
             results = [self._get_candidates_for_column(search_keys) for search_keys in col_search_keys.values()]
         else:
