@@ -5,11 +5,14 @@ import numpy as np
 from allennlp.commands.elmo import ElmoEmbedder
 from sentence_transformers import SentenceTransformer
 
-from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig, Embedding
+from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig, Embedding, FactBaseConfig, \
+    GeneratorResult
 from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
+from generators.baselines import FactBase
 from lookup import LookupService
 from utils.functions import simplify_string
+from utils.nn import RDF2VecTypePredictor
 
 
 class FastElmo(EmbeddingCandidateGenerator):
@@ -126,9 +129,36 @@ class FastBert(EmbeddingCandidateGenerator):
                 for abstract, embedding in zip(abstracts, self._model.encode([simplify_string(abstract)
                                                                               for abstract in abstracts]))]
 
-# fe = FastElmo()
-# print(fe.search("Bobtail", "Cat Female 7 10 Red"))  # breed, species, sex, age, weight, colour
-# print(fe.search("Bobtail", ""))  # breed, species, sex, age, weight, colour
-# print(fe.search("Beagle", "Dog Male 4 11 Black, tan and white"))  # breed, species, sex, age, weight, colour
-# print(fe.search("Boys Don't Cry",
-#                 "84 4-May-02 59 USA Peirce 1999 B-    2.7  "))  # CEA_ROUND1 row 5138 -> all abstracts are empty
+
+class FactBaseMLType(FactBase):
+
+    def __init__(self, *lookup_services: LookupService, config: FactBaseConfig):
+        super().__init__(*lookup_services, config=config)
+        self._type_predictor = None
+
+    def _search_strict(self, candidates: List[str], types: List[str], description_tokens: List[str]) -> List[str]:
+        refined_candidates = []
+        types_set = set(types)
+        description_tokens_set = set(description_tokens)
+        types = self._type_predictor.predict_types(candidates, size=2)
+
+        for candidate in candidates:
+            c_tokens = set(self._get_description_tokens(candidate))
+            if types[candidate]:
+                c_types = set(types[candidate])
+            else:
+                c_types = set(self._dbp.get_types(candidate))
+
+            if c_tokens & description_tokens_set and c_types & types_set:
+                refined_candidates.append(candidate)  # preserve ordering
+        return refined_candidates
+
+    def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+        """
+        Ovveride the parent method just to initialize the model in the parallel process
+        :param search_keys:
+        :return:
+        """
+        if not self._type_predictor:
+            self._type_predictor = RDF2VecTypePredictor()
+        return super()._get_candidates_for_column(search_keys)
