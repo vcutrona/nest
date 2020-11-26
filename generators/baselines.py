@@ -36,14 +36,12 @@ class LookupGenerator(CandidateGenerator):
         """
         search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         if self._config.max_workers == 1:
-            return self._lookup_candidates(search_keys)
+            results = self._lookup_candidates(search_keys)
+        else:  # Parallelize at cell level (no dependencies between cells in the same col/row)
+            with ProcessPoolExecutor(self._config.max_workers) as pool:
+                results = pool.map(self._lookup_candidates, chunk_list(search_keys, self._config.chunk_size))
 
-        # Parallelize at cell level (no dependencies between cells in the same col/row)
-        return functools.reduce(operator.iconcat,
-                                ProcessPoolExecutor(self._config.max_workers).map(self._lookup_candidates,
-                                                                                  chunk_list(search_keys,
-                                                                                             self._config.chunk_size)),
-                                [])
+        return functools.reduce(operator.iconcat, results, [])
 
 
 class FactBase(CandidateGenerator):
