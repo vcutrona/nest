@@ -128,7 +128,7 @@ class DatasetEnum(Enum):
         cta_groups = None
         if os.path.exists(from_dataset._gt_path('CTA')):
             cta = pd.read_csv(from_dataset._gt_path('CTA'),
-                              names=['tab_id', 'col_id', 'types'],
+                              names=['tab_id', 'col_id', 'perfect', 'okay'],
                               dtype={'tab_id': str, 'col_id': int, 'perfect': str, 'okay': str},
                               keep_default_na=False)  # the "okay" value might be empty
             cta['perfect'] = cta['perfect'].apply(str.split)
