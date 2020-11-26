@@ -1,6 +1,12 @@
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 from enum import Enum
 from typing import Dict, Tuple, List
+import pandas as pd
+
+from sklearn import preprocessing
+
+import numpy as np
 
 import requests
 from SPARQLWrapper import SPARQLWrapper, JSON
@@ -9,6 +15,7 @@ from elasticsearch_dsl import Search, Q
 
 from data_model.kgs import DBpediaWrapperConfig
 from utils.caching import CacheWrapper, KVPair
+
 
 PROPERTIES_BLACKLIST = ['http://dbpedia.org/ontology/abstract',
                         'http://dbpedia.org/ontology/wikiPageWikiLink',
@@ -84,7 +91,7 @@ class DBpediaWrapper:
             self._sparql.setQuery("""
                     SELECT distinct ?label
                     WHERE {
-                      <%s> rdfs:label ?label . 
+                      <%s> rdfs:label ?label .
                     FILTER (langMatches(lang(?label), "EN") || langMatches(lang(?label), "")) }
                     """ % uri)
 
@@ -108,8 +115,8 @@ class DBpediaWrapper:
             self._sparql.setQuery("""
             SELECT distinct ?uri ?abstract {
               VALUES ?uri { %s }
-              ?uri dbo:abstract ?abstract . 
-              FILTER langMatches( lang(?abstract), "EN" ) 
+              ?uri dbo:abstract ?abstract .
+              FILTER langMatches( lang(?abstract), "EN" )
             }
             """ % uris_list)
 
@@ -311,7 +318,7 @@ class DBpediaWrapper:
 
 
 class KGEmbedding(Enum):
-    RDF2VEC = 'http://localhost:5999/r2v/uniform'
+    RDF2VEC = 'http://149.132.176.50:5999/r2v/uniform'
     WORD2VEC = 'http://localhost:5998/w2v/dbp-300'
 
     def get_vectors(self, uris):
@@ -323,3 +330,53 @@ class KGEmbedding(Enum):
         data = {'uri': uris}
         response = requests.get(self.value, params=data)
         return response.json()
+
+
+def get_model():
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras import layers
+    data = pd.read_csv("/datahdd/gpuleri/dbpedia_training_data_type", sep="\t", header=None)
+    data = data.sample(frac=1)
+
+    le = preprocessing.LabelBinarizer()
+    train_y = le.fit_transform(data[1].values.tolist())
+
+    subject_input = keras.Input(
+        shape=(200,), name="title"
+    )
+
+    x = layers.Dense(300, activation="relu")(subject_input)
+    dense_x = layers.Dense(300, activation="relu")(x)
+    likelihood_pred = layers.Dense(len(train_y[0]), activation="softmax")(dense_x)
+
+    model = keras.Model(
+        inputs=subject_input,
+        outputs=likelihood_pred,
+    )
+
+    return model, le
+
+
+class NeuralNetwork:
+
+    def __init__(self):
+        self._r2v = KGEmbedding.RDF2VEC
+        #sess = tf.compat.v1.Session()
+        self._model, self._le = get_model()
+        self._model.load_weights('/datahdd/gpuleri/knowledge_lh.keras')
+        #sess.close()
+
+    def get_types(self, uri):
+        types = []
+        vecs = list(self._r2v.get_vectors([uri]).values())
+        for vec in vecs:
+            if vec:
+                v1 = np.array([vec])
+                x = self._model.predict(v1)
+                types += [self._le.classes_[index]
+                          for index in np.argsort(np.max(-x, axis=0))[:2]]  # desc sort by likelihood
+        types = [t for t in types if t not in TYPES_BLACKLIST]
+
+        return types
+

@@ -13,7 +13,7 @@ from generators import EmbeddingCandidateGenerator, Generator
 class CEAAnnotator:
     def __init__(self,
                  generator: Generator,
-                 threads: int = mp.cpu_count()):
+                 threads: int = 6):  # mp.cpu_count()):
         """
         :param generator:
         :param threads: max number of threads used to parallelize the annotation

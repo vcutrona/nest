@@ -1,5 +1,3 @@
-import json
-import os
 from collections import Counter
 from itertools import product
 from typing import List, Iterable, Tuple, Any, Dict
@@ -14,7 +12,7 @@ from data_model.generator import GeneratorResult, CandidateGeneratorConfig, Fact
 from generators import CandidateGenerator, HybridGenerator
 from lookup import LookupService
 from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity
-from utils.kgs import DBpediaWrapper, KGEmbedding
+from utils.kgs import DBpediaWrapper, KGEmbedding, NeuralNetwork
 
 
 class LookupGenerator(CandidateGenerator):
@@ -22,8 +20,8 @@ class LookupGenerator(CandidateGenerator):
     A generator that just forwards lookup results.
     """
 
-    def __init__(self, lookup_service: LookupService, config: CandidateGeneratorConfig = CandidateGeneratorConfig(0)):
-        super().__init__(lookup_service, config)
+    def __init__(self, *lookup_services: LookupService, config: CandidateGeneratorConfig = CandidateGeneratorConfig(0)):
+        super().__init__(*lookup_services, config=config)
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
         """
@@ -36,9 +34,11 @@ class LookupGenerator(CandidateGenerator):
 
 
 class FactBase(CandidateGenerator):
-    def __init__(self, lookup_service: LookupService, config: FactBaseConfig = FactBaseConfig(0)):
-        super().__init__(lookup_service, config)
+
+    def __init__(self, *lookup_services: LookupService, config: FactBaseConfig = FactBaseConfig(0)):
+        super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
+        self._model = NeuralNetwork()
 
     def _get_description_tokens(self, uri: str) -> List[str]:
         """
@@ -88,7 +88,7 @@ class FactBase(CandidateGenerator):
                                     key=lambda item: item[1], reverse=True)
         return relations
 
-    def _search_strict(self, candidates: List[str], types: List[str], description_tokens: List[str]) -> List[str]:
+    def _search_strict(self, candidates: List[str], model, types: List[str], description_tokens: List[str]) -> List[str]:
         """
         Execute a search operation on a given label restricting the results to those of an acceptable
         type, having one of the most frequent tokens in their description values
@@ -103,7 +103,7 @@ class FactBase(CandidateGenerator):
         description_tokens_set = set(description_tokens)
         for candidate in candidates:
             c_tokens = set(self._get_description_tokens(candidate))
-            c_types = set(self._dbp.get_types(candidate))
+            c_types = set(model.get_types(candidate))
             if c_tokens & description_tokens_set and c_types & types_set:
                 refined_candidates.append(candidate)  # preserve ordering
 
@@ -125,7 +125,8 @@ class FactBase(CandidateGenerator):
                 [(candidate, edit_distance(label, c_label) / max(len(label), len(c_label))) for c_label in c_labels],
                 key=lambda s: s[1])
             if scores:
-                candidates.append(scores[0])  # keep the best label for each candidate
+                if scores[0][1] <= 0.2:
+                    candidates.append(scores[0])  # keep the best label for each candidate
 
         return [c[0] for c in sorted(candidates, key=lambda s: s[1])]  # sort by edit distance
 
@@ -150,7 +151,7 @@ class FactBase(CandidateGenerator):
             # Handle cells with some candidates (higher confidence)
             if candidates:
                 top_result = candidates[0]
-                all_types += self._dbp.get_types(top_result)
+                all_types += [top_result]
                 desc_tokens += self._get_description_tokens(top_result)
                 # Check for relationships if there is only one candidate (very high confidence)
                 if len(candidates) == 1:
@@ -160,8 +161,11 @@ class FactBase(CandidateGenerator):
                             facts[col_id] = []
                         facts[col_id].append((top_result, col_value))
 
-        acceptable_types = self._get_most_frequent(all_types, n=5)
-        description_tokens = self._get_most_frequent(desc_tokens)
+        model = NeuralNetwork()  # don't put in constructor -> parallelization error
+
+        all_types = model.get_types(all_types)
+        acceptable_types = self._get_most_frequent(all_types)
+        description_tokens = self._get_most_frequent(desc_tokens, n=3)
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
@@ -173,23 +177,28 @@ class FactBase(CandidateGenerator):
                 continue
 
             # Strict search: filter lists of candidates by removing entities that do not match types and tokens
-            refined_candidates = self._search_strict(candidates,
-                                                     acceptable_types,
-                                                     description_tokens)
-            if refined_candidates:
-                generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
+            refined_candidates_strict = self._search_strict(candidates, model,
+                                                            acceptable_types,
+                                                            description_tokens)
+
+            if len(refined_candidates_strict) == 1:
+                generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
                 continue
 
             # Loose search: increase the recall by allowing a big margin of edit distance (Levenshtein)
             context_dict = dict(search_key.context)
             for col_id, relation in relations.items():
                 refined_candidates = self._search_loose(search_key.label, relation, context_dict[col_id])
-                if len(refined_candidates) > 0:
-                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
+                intersection = set(refined_candidates_strict) & set(refined_candidates)
+                if intersection:
+                    generator_results[search_key] = GeneratorResult(search_key, list(intersection))
                     break
 
             # Coarse- and fine-grained searches failed: check for an exact match!
             if search_key not in generator_results:
+                if refined_candidates_strict:
+                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
+                    continue
                 if candidates and search_key.label in self._dbp.get_label(candidates[0]):
                     generator_results[search_key] = GeneratorResult(search_key, candidates)
                 else:  # No results
@@ -200,9 +209,9 @@ class FactBase(CandidateGenerator):
 
 class EmbeddingOnGraph(CandidateGenerator):
 
-    def __init__(self, lookup_service: LookupService,
+    def __init__(self, *lookup_services: LookupService,
                  config: EmbeddingOnGraphConfig = EmbeddingOnGraphConfig(0, 5, 0.25)):
-        super().__init__(lookup_service, config)
+        super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
         self._w2v = KGEmbedding.WORD2VEC
 
@@ -250,7 +259,7 @@ class EmbeddingOnGraph(CandidateGenerator):
                     disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
 
         # Thin out a fraction of edges which weights are the lowest
-        thin_out = int((1 - self._config.thin_out_frac) * len(disambiguation_graph.edges.data("weight")))
+        thin_out = int(self._config.thin_out_frac * len(disambiguation_graph.edges.data("weight")))
         disambiguation_graph.remove_edges_from(
             sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
 

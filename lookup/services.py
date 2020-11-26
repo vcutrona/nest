@@ -1,10 +1,9 @@
-import urllib.parse
-
 import requests
 from elasticsearch import Elasticsearch, TransportError
 from elasticsearch_dsl import Q, Search
 
-from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig, ESLookupFuzzyConfig
+from data_model.lookup import LookupResult, ESLookupConfig, WikipediaSearchConfig, DBLookupConfig, ESLookupFuzzyConfig, \
+    ESLookupTrigramConfig, ESLookupExactConfig
 from lookup import LookupService
 
 
@@ -48,8 +47,18 @@ class ESLookup(LookupService):
         raise NotImplementedError
 
 
+class ESLookupExact(ESLookup):
+    def __init__(self, config: ESLookupExactConfig = ESLookupExactConfig('localhost', 'dbpedia')):
+        super().__init__(config)
+
+    def _query(self, label):
+        return Q('bool',
+                 must=[Q('terms', surface_form_keyword__keyword=[label, label.lower()])],
+                 )
+
+
 class ESLookupFuzzy(ESLookup):
-    def __init__(self, config: ESLookupFuzzyConfig = ESLookupFuzzyConfig('localhost', 'dbpedia-ngram')):
+    def __init__(self, config: ESLookupFuzzyConfig = ESLookupFuzzyConfig('localhost', 'dbpedia')):
         super().__init__(config)
 
     def _query(self, label):
@@ -63,22 +72,22 @@ class ESLookupFuzzy(ESLookup):
             q['max_expansions'] = self._config.max_expansions
 
         return Q('bool',
-                 should=[Q('match', description=str(label).lower()),
-                         Q('multi_match', query=str(label).lower(), fields=['surface_form_keyword'], boost=5),
-                         Q({"fuzzy": {"surface_form_keyword": q}})
-                         ])
+                 minimum_should_match=1,
+                 should=[
+                     Q('terms', surface_form_keyword__keyword=[label, label.lower()], boost=15),
+                     Q('terms', description__keyword=[label, label.lower()], boost=3),
+                     Q({"fuzzy": {"surface_form_keyword": q}}),
+                     Q({"fuzzy": {"description": q}})
+                 ])
 
 
 class ESLookupTrigram(ESLookup):
-    def __init__(self, config: ESLookupConfig = ESLookupConfig('localhost', 'dbpedia-ngram')):
+    def __init__(self, config: ESLookupTrigramConfig = ESLookupTrigramConfig('localhost', 'dbpedia')):
         super().__init__(config)
 
     def _query(self, label):
-        return Q('bool',
-                 must=[Q('multi_match',
-                         query=str(label).lower(),
-                         fields=['surface_form_keyword.ngram'])
-                       ])
+        return Q('match', surface_form_keyword__ngram={'query': str(label).lower(),
+                                                       'minimum_should_match': self._config.min_match})
 
 
 class WikipediaSearch(LookupService):
