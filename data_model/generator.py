@@ -51,7 +51,7 @@ class FastBertConfig(EmbeddingCandidateGeneratorConfig):
 
 @dataclass
 class FactBaseConfig(CandidateGeneratorConfig):
-    pass  # TODO put parameters
+    max_workers: int = 1
 
 
 @dataclass
