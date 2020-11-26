@@ -36,11 +36,13 @@ class RDF2VecTypePredictor:
 
     def predict_types(self, uris, size=1):
         types = {}
-        vectors = {k: v for k, v in self._r2v.get_vectors(uris).items() if v}
-        pred = self._model.predict(np.array(list(vectors.values())))
+        rdf2vectors = {k: v for k, v in self._r2v.get_vectors(uris).items() if v}
+        vectors = np.array(list(rdf2vectors.values()))
+        if vectors.size > 0:
+            pred = self._model.predict(vectors)
 
-        for idx, uri in enumerate(vectors):
-            types[uri] = [self._classes[index] for index in np.argsort(-pred[idx])[:size]]
+            for idx, uri in enumerate(rdf2vectors):
+                types[uri] = [self._classes[index] for index in np.argsort(-pred[idx])[:size]]
 
         for uri in uris:
             if uri not in types:

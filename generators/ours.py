@@ -155,7 +155,7 @@ class FactBaseMLType(FactBase):
 
     def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
-        Ovveride the parent method just to initialize the model in the parallel process
+        Override the parent method just to initialize the model in the parallel process
         :param search_keys:
         :return:
         """
