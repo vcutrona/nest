@@ -1,6 +1,6 @@
 import pickle
 import numpy as np
-from utils.kgs import KGEmbedding
+from utils.kgs import KGEmbedding, TYPES_BLACKLIST
 
 
 class RDF2VecTypePredictor:
@@ -48,4 +48,4 @@ class RDF2VecTypePredictor:
             if uri not in types:
                 types[uri] = []
 
-        return types
+        return [t for t in types if t not in TYPES_BLACKLIST]

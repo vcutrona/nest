@@ -136,7 +136,7 @@ class FactBase(CandidateGenerator):
             scores = sorted(
                 [(candidate, edit_distance(label, c_label) / max(len(label), len(c_label))) for c_label in c_labels],
                 key=lambda s: s[1])
-            if scores:
+            if scores and scores[0][1] <= 0.2:
                 candidates.append(scores[0])  # keep the best label for each candidate
 
         return [c[0] for c in sorted(candidates, key=lambda s: s[1])]  # sort by edit distance
@@ -171,7 +171,7 @@ class FactBase(CandidateGenerator):
                         facts[col_id].append((top_result, col_value))
 
         acceptable_types = self._get_most_frequent(all_types, n=5)
-        description_tokens = self._get_most_frequent(desc_tokens)
+        description_tokens = self._get_most_frequent(desc_tokens, n=3)
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
@@ -283,7 +283,7 @@ class EmbeddingOnGraph(CandidateGenerator):
                     disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
 
         # Thin out a fraction of edges which weights are the lowest
-        thin_out = int((1 - self._config.thin_out_frac) * len(disambiguation_graph.edges.data("weight")))
+        thin_out = int(self._config.thin_out_frac * len(disambiguation_graph.edges.data("weight")))
         disambiguation_graph.remove_edges_from(
             sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
 
