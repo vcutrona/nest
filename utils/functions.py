@@ -173,10 +173,11 @@ def tokenize(sentence: str, language: str = 'english', stemming: bool = False) -
     Simple preprocessing: removes punctuation and stopwords and apply stemming if needed
     """
     tokenizer = RegexpTokenizer(r'\w+')
+    tokens = [w for w in tokenizer.tokenize(sentence.lower()) if w not in stopwords.words(language)]
     if stemming:
         porter = PorterStemmer()
-        return [porter.stem(w) for w in tokenizer.tokenize(sentence.lower()) if w not in stopwords.words(language)]
-    return [w for w in tokenizer.tokenize(sentence.lower()) if w not in stopwords.words(language)]
+        tokens = [porter.stem(t) for t in tokens]
+    return tokens
 
 
 def simplify_string(input_str, dates=True, numbers=True, single_char=True, brackets=True):
