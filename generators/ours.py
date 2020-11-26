@@ -130,6 +130,79 @@ class FastBert(EmbeddingCandidateGenerator):
                                                                               for abstract in abstracts]))]
 
 
+class FactBaseV2(FactBase):
+    def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+        """
+        Generate candidate for a set of search keys.
+        The assumption is that all the search keys belong to the same column.
+        :param search_keys: a list of search_keys
+        :return:
+        """
+        lookup_results = dict(self._lookup_candidates(search_keys))
+        generator_results = {}
+
+        all_types = []  # list of candidates types
+        desc_tokens = []  # list of tokens in candidates descriptions
+        facts = {}  # dict of possible facts in table (fact := <top_concept, ?p, support_col_value>)
+
+        # First scan - raw results
+        for search_key, candidates in lookup_results.items():
+            if candidates:
+                top_result = candidates[0]
+                all_types += self._dbp.get_types(top_result)
+                desc_tokens += self._get_description_tokens(top_result)
+                # Check for relationships if there is only one candidate (very high confidence)
+                if len(candidates) == 1:
+                    generator_results[search_key] = GeneratorResult(search_key, candidates)
+                    for col_id, col_value in search_key.context:
+                        if col_id not in facts:
+                            facts[col_id] = []
+                        facts[col_id].append((top_result, col_value))
+
+        acceptable_types = self._get_most_frequent(all_types, n=5)
+        description_tokens = self._get_most_frequent(desc_tokens, n=3)
+        relations = {col_id: candidate_relations[0][0]
+                     for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
+                     if candidate_relations}
+
+        # Second scan - refinement and loose searches
+        for search_key, candidates in lookup_results.items():
+
+            # Skip already annotated cells
+            if search_key in generator_results:
+                continue
+
+            # Strict search: filter lists of candidates by removing entities that do not match types and tokens
+            refined_candidates_strict = self._search_strict(candidates,
+                                                            acceptable_types,
+                                                            description_tokens)
+            if len(refined_candidates_strict) == 1:
+                generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
+                continue
+
+            # Loose search: increase the recall by allowing a big margin of edit distance (Levenshtein)
+            context_dict = dict(search_key.context)
+            for col_id, relation in relations.items():
+                refined_candidates_loose = self._search_loose(search_key.label, relation, context_dict[col_id])
+                # Take candidates found with both the search strategies (strict and loose)
+                refined_candidates = [candidate for candidate in refined_candidates_strict
+                                      if candidate in refined_candidates_loose]
+                if refined_candidates:  # Annotate only if there are common candidates
+                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
+                    break
+
+            # Coarse- and fine-grained searches did not find common candidates:
+            if search_key not in generator_results:
+                if refined_candidates_strict:  # Resort to the strict search, if there are results
+                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
+                elif candidates and search_key.label in self._dbp.get_label(candidates[0]):  # Perfect label match
+                    generator_results[search_key] = GeneratorResult(search_key, candidates)
+                else:  # No results
+                    generator_results[search_key] = GeneratorResult(search_key, [])
+
+        return list(generator_results.values())
+
+
 class FactBaseMLType(FactBase):
 
     def __init__(self, *lookup_services: LookupService, config: FactBaseConfig):
