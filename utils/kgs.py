@@ -152,13 +152,24 @@ class DBpediaWrapper:
 
         cached_entries, to_compute = self._rels_cache.get_cached_entries(subj_obj_pairs)
         results = {key: [] for key in to_compute}
-        for i in range(0, len(to_compute), 25):
-            query_values = " ".join(map(lambda x: '(<%s> "%s")' % x, to_compute[i:i + 25]))
-            self._sparql.setQuery(query % query_values)
-            for result in self._sparql.query().convert()["results"]["bindings"]:
-                key, value = (result['entity']['value'], result["value"]['value']), result["rel"]['value']
-                if not (filter_blacklisted and value in PROPERTIES_BLACKLIST):
-                    results[key].append(value)
+
+        chunk_sizes = [x ** 2 for x in range(5, 0, -1)]  # handle too long queries
+        for chunk_size in chunk_sizes:
+            retry = False
+            for i in range(0, len(to_compute), chunk_size):
+                query_values = " ".join(map(lambda x: '(<%s> "%s")' % (x[0], x[1].replace('"', '\\"')),
+                                            to_compute[i:i + chunk_size]))
+                self._sparql.setQuery(query % query_values)
+                try:
+                    for result in self._sparql.query().convert()["results"]["bindings"]:
+                        key, value = (result['entity']['value'], result["value"]['value']), result["rel"]['value']
+                        if not (filter_blacklisted and value in PROPERTIES_BLACKLIST):
+                            results[key].append(value)
+                except:  # if an error occurs, retry with smaller chunks
+                    retry = True
+                    break
+            if not retry:
+                break
 
         self._rels_cache.update_cache_entries([KVPair(sub_obj_pair, (sub_obj_pair, results[sub_obj_pair]))
                                                for sub_obj_pair in to_compute])
