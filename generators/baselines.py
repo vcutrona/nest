@@ -136,7 +136,7 @@ class FactBase(CandidateGenerator):
             scores = sorted(
                 [(candidate, edit_distance(label, c_label) / max(len(label), len(c_label))) for c_label in c_labels],
                 key=lambda s: s[1])
-            if scores and scores[0][1] <= 0.2:
+            if scores:
                 candidates.append(scores[0])  # keep the best label for each candidate
 
         return [c[0] for c in sorted(candidates, key=lambda s: s[1])]  # sort by edit distance
@@ -171,7 +171,7 @@ class FactBase(CandidateGenerator):
                         facts[col_id].append((top_result, col_value))
 
         acceptable_types = self._get_most_frequent(all_types, n=5)
-        description_tokens = self._get_most_frequent(desc_tokens, n=3)
+        description_tokens = self._get_most_frequent(desc_tokens)
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
@@ -200,10 +200,7 @@ class FactBase(CandidateGenerator):
 
             # Coarse- and fine-grained searches failed: check for an exact match!
             if search_key not in generator_results:
-                if candidates and search_key.label in self._dbp.get_label(candidates[0]):
-                    generator_results[search_key] = GeneratorResult(search_key, candidates)
-                else:  # No results
-                    generator_results[search_key] = GeneratorResult(search_key, [])
+                generator_results[search_key] = GeneratorResult(search_key, [])
 
         return list(generator_results.values())
 
