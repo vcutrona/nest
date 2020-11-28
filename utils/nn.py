@@ -44,14 +44,11 @@ class RDF2VecTypePredictor:
             pred = self._model.predict(vectors)
 
             for idx, uri in enumerate(rdf2vectors):
-                types[uri] = [self._classes[index] for index in np.argsort(-pred[idx])[:size]]
+                types[uri] = [self._classes[index] for index in np.argsort(-pred[idx])[:size]
+                              if self._classes[index] not in TYPES_BLACKLIST]
 
         for uri in uris:
             if uri not in types:
                 types[uri] = []
-            for t in types[uri]:
-                if t in TYPES_BLACKLIST:
-                    types[uri].remove(t)
 
         return types
-
