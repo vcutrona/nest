@@ -3,6 +3,7 @@ from typing import List
 
 import numpy as np
 from allennlp.commands.elmo import ElmoEmbedder
+from nltk import edit_distance
 from sentence_transformers import SentenceTransformer
 
 from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig, Embedding, FactBaseConfig, \
@@ -131,6 +132,27 @@ class FastBert(EmbeddingCandidateGenerator):
 
 
 class FactBaseV2(FactBase):
+
+    def _search_loose(self, label: str, relation: str, value: str) -> List[str]:
+        """
+        Execute a fuzzy search (Levenshtein) and get the results for which there exist a fact <result, relation, value>.
+        Return the subject with the minimal edit distance from label.
+
+        :param label: the label to look for
+        :param relation: a relation
+        :param value: a value
+        :return: a list of results
+        """
+        candidates = []
+        for candidate, c_labels in self._dbp.get_subjects(relation, value).items():
+            scores = sorted(
+                [(candidate, edit_distance(label, c_label) / max(len(label), len(c_label))) for c_label in c_labels],
+                key=lambda s: s[1])
+            if scores and scores[0][1] <= 0.2:  # set a threshold for the edit distance
+                candidates.append(scores[0])  # keep the best label for each candidate
+
+        return [c[0] for c in sorted(candidates, key=lambda s: s[1])]  # sort by edit distance
+
     def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
         Generate candidate for a set of search keys.
@@ -160,7 +182,7 @@ class FactBaseV2(FactBase):
                         facts[col_id].append((top_result, col_value))
 
         acceptable_types = self._get_most_frequent(all_types, n=5)
-        description_tokens = self._get_most_frequent(desc_tokens, n=3)
+        description_tokens = self._get_most_frequent(desc_tokens, n=3)  # take more tokens
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
