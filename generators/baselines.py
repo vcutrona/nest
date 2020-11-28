@@ -198,7 +198,7 @@ class FactBase(CandidateGenerator):
                     generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
                     break
 
-            # Coarse- and fine-grained searches failed: check for an exact match!
+            # Coarse- and fine-grained searches failed: no results
             if search_key not in generator_results:
                 generator_results[search_key] = GeneratorResult(search_key, [])
 
