@@ -296,8 +296,8 @@ class DBpediaWrapper:
         cached = self._subj_cache.get_cached_entry((prop, value))
         if cached:
             return cached
-
-        words_set = {'"%s"' % v for v in {value, value.lower(), value.upper(), value.capitalize(), value.title()}}
+        val = value.replace('"', '\\"')
+        words_set = {'"%s"' % v for v in {val, val.lower(), val.upper(), val.capitalize(), val.title()}}
         words_set.update(["%s@en" % w for w in words_set])
         query = """
         SELECT distinct ?subject (str(?label) as ?label)
