@@ -1,18 +1,21 @@
 import os
+from itertools import product
 from typing import List
 
+import networkx as nx
 import numpy as np
 from nltk import edit_distance
 from allennlp.commands.elmo import ElmoEmbedder
 from sentence_transformers import SentenceTransformer
 
+from data_model.dataset import Table
 from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig, Embedding, FactBaseConfig, \
-    GeneratorResult
+    GeneratorResult, ScoredCandidate
 from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
-from generators.baselines import FactBase
+from generators.baselines import FactBase, EmbeddingOnGraph
 from lookup import LookupService
-from utils.functions import simplify_string, tokenize
+from utils.functions import simplify_string, cosine_similarity
 from utils.nn import RDF2VecTypePredictor
 
 
@@ -234,19 +237,21 @@ class FactBaseMLType(FactBaseV2):
     def _search_strict(self, candidates: List[str], types: List[str], description_tokens: List[str]) -> List[str]:
         refined_candidates = []
         types_set = set(types)
-        #description_tokens_set = set(description_tokens)
+        description_tokens_set = set(description_tokens)
         types = self._type_predictor.predict_types(candidates, size=2)
 
         for candidate in candidates:
-            #c_tokens = set(self._get_description_tokens(candidate))
 
-            if types[candidate]:
+            if types[candidate]:  # types only
                 c_types = set(types[candidate])
-            else:
+                if c_types & types_set:
+                    refined_candidates.append(candidate)  # preserve ordering
+            else:  # types and descriptions too
+                c_tokens = set(self._get_description_tokens(candidate))
                 c_types = set(self._dbp.get_types(candidate))
+                if c_tokens & description_tokens_set and c_types & types_set:
+                    refined_candidates.append(candidate)  # preserve ordering
 
-            if c_types & types_set: #if c_tokens & description_tokens_set and c_types & types_set:
-                refined_candidates.append(candidate)  # preserve ordering
         return refined_candidates
 
     def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
@@ -262,7 +267,6 @@ class FactBaseMLType(FactBaseV2):
         generator_results = {}
 
         top_results = []  # list of top results
-        all_types = []  # list of candidates types
         desc_tokens = []  # list of tokens in candidates descriptions
         facts = {}  # dict of possible facts in table (fact := <top_concept, ?p, support_col_value>)
 
@@ -271,7 +275,7 @@ class FactBaseMLType(FactBaseV2):
             if candidates:
                 top_result = candidates[0]
                 top_results += [top_result]
-                #desc_tokens += self._get_description_tokens(top_result)
+                desc_tokens += self._get_description_tokens(top_result)
                 # Check for relationships if there is only one candidate (very high confidence)
                 if len(candidates) == 1:
                     generator_results[search_key] = GeneratorResult(search_key, candidates)
@@ -282,8 +286,7 @@ class FactBaseMLType(FactBaseV2):
 
         all_types = [x for t in self._type_predictor.predict_types(top_results).values() for x in t]
         acceptable_types = self._get_most_frequent(all_types)
-        #description_tokens = self._get_most_frequent(desc_tokens, n=3)
-        description_tokens = []
+        description_tokens = self._get_most_frequent(desc_tokens, n=3)
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
@@ -307,7 +310,7 @@ class FactBaseMLType(FactBaseV2):
             context_dict = dict(search_key.context)
             for col_id, relation in relations.items():
                 refined_candidates_loose = self._search_loose(search_key.label, relation, context_dict[col_id])
-                # Take candidates found with both the search strategies (strict and loose)
+                # Take candidates found with both the search strategies (strict and loose), loose priority
                 refined_candidates = [candidate for candidate in refined_candidates_loose
                                       if candidate in refined_candidates_strict]
                 if refined_candidates:  # Annotate only if there are common candidates
@@ -322,5 +325,88 @@ class FactBaseMLType(FactBaseV2):
                     generator_results[search_key] = GeneratorResult(search_key, candidates)
                 else:  # No results
                     generator_results[search_key] = GeneratorResult(search_key, [])
+
+        return list(generator_results.values())
+
+
+class EmbeddingOnGraphV2(EmbeddingOnGraph):
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
+        lookup_results = dict(self._lookup_candidates(search_keys))
+
+        # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
+        disambiguation_graph = nx.DiGraph()
+        sk_nodes = {}
+        personalization = {}  # prepare dict for pagerank with normalized priors
+        embeddings = {}
+        for search_key, candidates in lookup_results.items():
+            embeddings.update(self._w2v.get_vectors(candidates))
+
+            # Filter candidates that have an embedding in w2v.
+            nodes = sorted([(candidate, {'weight': self._dbp.get_degree(candidate)})
+                            for candidate in candidates
+                            if embeddings[candidate]],
+                           key=lambda x: x[1]['weight'], reverse=True)
+
+            # Take only the max_candidates most relevant (highest priors probability) candidates.
+            nodes = nodes[:self._config.max_candidates]
+
+            disambiguation_graph.add_nodes_from(nodes)
+            sk_nodes[search_key] = [n[0] for n in nodes]
+
+            # Store normalized priors
+            weights_sum = sum([x[1]['weight'] for x in nodes])
+            for node, props in nodes:
+                if node not in personalization:
+                    personalization[node] = []
+                personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
+
+        # Add weighted edges among the nodes in the disambiguation graph.
+        # Avoid to connect nodes in the same partition.
+        # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
+        # Only positive weights are considered.
+        for search_key, nodes in sk_nodes.items():
+            other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
+            for node, other_node in product(nodes, other_nodes):
+                v1 = np.array(embeddings[node])
+                v2 = np.array(embeddings[other_node])
+                cos_sim = cosine_similarity(v1, v2)
+                if cos_sim > 0:
+                    disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
+
+        # Thin out a fraction of edges which weights are the lowest
+        # thin_out = int(self._config.thin_out_frac * len(disambiguation_graph.edges.data("weight")))
+        # disambiguation_graph.remove_edges_from(
+        #     sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
+
+        # Page rank computaton - epsilon is increased by a factor 2 until convergence
+        page_rank = None
+        epsilon = 1e-6
+        while page_rank is None:
+            try:
+                page_rank = nx.pagerank(disambiguation_graph,
+                                        tol=epsilon, max_iter=50, alpha=0.9,
+                                        personalization={node: np.mean(weights)
+                                                         for node, weights in personalization.items()})
+            except nx.PowerIterationFailedConvergence:
+                epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
+
+        # Sort candidates -> the higher the score, the better the candidate (reverse=True)
+        generator_results = {}
+        for search_key, candidates in sk_nodes.items():
+            # if len(candidates) == 1:
+            #     generator_results[search_key] = GeneratorResult(search_key, candidates)
+            scored_candidates = sorted([ScoredCandidate(candidate, page_rank[candidate])
+                             for candidate in candidates], reverse=True)
+            if scored_candidates:
+                score = [cand.score for cand in scored_candidates]
+                threshold = np.mean(score) + np.std(score)  # * 0.6 try adding alpha on std to increase precision
+                if len(scored_candidates) > 1:
+                    if scored_candidates[1].score < threshold:
+                        generator_results[search_key] = GeneratorResult(search_key, [scored_candidates[0].candidate])
+                else:
+                    generator_results[search_key] = GeneratorResult(search_key, [cand.candidate
+                                                                                 for cand in scored_candidates])
 
         return list(generator_results.values())
