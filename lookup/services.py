@@ -86,8 +86,13 @@ class ESLookupTrigram(ESLookup):
         super().__init__(config)
 
     def _query(self, label):
-        return Q('match', surface_form_keyword__ngram={'query': str(label).lower(),
-                                                       'minimum_should_match': self._config.min_match})
+        return Q('nested',
+                 path="nested_surface_form",
+                 query=Q('match',
+                         nested_surface_form__surface_form_keyword__ngram={
+                             'query': str(label).lower(),
+                             'minimum_should_match': self._config.min_match
+                         }))
 
 
 class WikipediaSearch(LookupService):
