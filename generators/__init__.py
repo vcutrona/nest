@@ -7,8 +7,7 @@ import numpy as np
 from diskcache import Cache
 
 from data_model.dataset import Table
-from data_model.generator import CandidateGeneratorConfig, EmbeddingCandidateGeneratorConfig, \
-    CandidateEmbeddings, GeneratorResult, Embedding
+from data_model.generator import EmbeddingCandidateGeneratorConfig, CandidateEmbeddings, GeneratorResult, Embedding
 from data_model.lookup import SearchKey
 from lookup import LookupService
 from utils.functions import weighting_by_ranking, truncate_string
@@ -46,9 +45,10 @@ class CandidateGenerator(Generator):
 
     @property
     def id(self) -> str:
-        return "_".join([self.__class__.__name__] +
-                        [lookup_service.__class__.__name__ for lookup_service in self._lookup_services] +
-                        [self._config.config_str()])
+        return "__".join([self.__class__.__name__] +
+                         [f"{lookup_service.__class__.__name__}{lookup_service.max_hits}"
+                          for lookup_service in self._lookup_services] +
+                         [self._config.config_str()])
 
     def _lookup_candidates(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
@@ -62,7 +62,7 @@ class CandidateGenerator(Generator):
                       if search_key.label not in lookup_results or not lookup_results[search_key.label]]
             if not labels:
                 break
-            
+
             if self._config.max_subseq_len and self._config.max_subseq_len > 0:
                 lookup_results.update(dict(lookup_service.lookup_subsequences(labels, self._config.max_subseq_len)))
             else:
@@ -206,7 +206,7 @@ class HybridGenerator(Generator):
 
     @property
     def id(self) -> str:
-        return "_".join([self.__class__.__name__] + [generator.id for generator in self._generators])
+        return "__".join([self.__class__.__name__] + [generator.id for generator in self._generators])
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
         res_dict = dict()
