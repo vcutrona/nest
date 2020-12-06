@@ -1,6 +1,7 @@
 import re
 import string as string_utils
-from typing import List
+from collections import Counter
+from typing import List, Iterable
 from typing import Tuple, Dict, Set
 
 import nltk
@@ -29,6 +30,20 @@ def chunk_list(list_, chunk_size):
     """
     for i in range(0, len(list_), chunk_size):
         yield list_[i:i + chunk_size]
+
+
+def get_most_frequent(list_: Iterable, n: int = 1) -> List:
+    """
+    Get the `n` most frequent values in a list
+
+    :param list_: a list
+    :param n: number of values to be returned
+    :return: a list with the most frequent values
+    """
+    if not list_:
+        return []
+    counter = Counter(list_)
+    return [list(tup_) for tup_ in zip(*counter.most_common(n))][0]
 
 
 def strings_subsequences(strings: List[str], max_subseq_len) -> Tuple[Dict[str, List[str]], Set[str]]:

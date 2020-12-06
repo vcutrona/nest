@@ -98,7 +98,7 @@ def annotate_table(table):
 
             # if annotationList[count + index] == "not annotated" and firstResult[index] != "not annotated":
             if search_key not in table.cell_annotations and cell in firstResult:
-                label_ = abc.get_label(firstResult[cell])
+                label_ = abc.get_labels_for_uris([firstResult[cell]])[firstResult[cell]]
 
                 if len(label_) > 0:
                     if label_[0] == label:

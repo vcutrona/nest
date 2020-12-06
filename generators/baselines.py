@@ -3,7 +3,7 @@ import operator
 from collections import Counter
 from concurrent.futures.process import ProcessPoolExecutor
 from itertools import product
-from typing import List, Iterable, Tuple, Any, Dict
+from typing import List, Tuple, Any, Dict
 
 import networkx as nx
 import numpy as np
@@ -15,7 +15,7 @@ from data_model.generator import GeneratorResult, FactBaseConfig, EmbeddingOnGra
 from data_model.lookup import SearchKey
 from generators import CandidateGenerator
 from lookup import LookupService
-from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity, chunk_list
+from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity, chunk_list, get_most_frequent
 from utils.kgs import DBpediaWrapper, KGEmbedding
 
 
@@ -52,34 +52,26 @@ class FactBase(CandidateGenerator):
         super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
 
-    def _get_description_tokens(self, uri: str) -> List[str]:
+    def _get_descriptions_tokens(self, uris: List[str]) -> Dict[str, List[str]]:
         """
-        Get the description tokens of the given entity
+        Get the tokens of descriptions of a given list of entities
 
-        :param uri: the URI to be read
-        :return: a list of keywords
+        :param uris: a list of URIs
+        :return: a dict uri: tokens
         """
-        descriptions = self._dbp.get_descriptions(uri)
-        if descriptions:
-            desc = simplify_string(descriptions[0], dates=False, numbers=False, single_char=False, brackets=True)
-            short_desc = first_sentence(desc)
-            if short_desc:
-                return tokenize(short_desc)
+        tokens = {}
+        for uri, descriptions in self._dbp.get_descriptions_for_uris(uris).items():
+            if descriptions:
+                desc = simplify_string(descriptions[0], dates=False, numbers=False, single_char=False, brackets=True)
+                short_desc = first_sentence(desc)
+                if short_desc:
+                    tokens[uri] = tokenize(short_desc)
+                else:
+                    tokens[uri] = []
+            else:
+                tokens[uri] = []
 
-        return []
-
-    def _get_most_frequent(self, list_: Iterable, n: int = 1) -> List:
-        """
-        Get the `n` most frequent values in a list
-
-        :param list_: a list
-        :param n: number of values to be returned
-        :return: a list with the most frequent values
-        """
-        if not list_:
-            return []
-        counter = Counter(list_)
-        return [list(tup_) for tup_ in zip(*counter.most_common(n))][0]
+        return tokens
 
     def _contains_facts(self, facts: Dict[Any, List[Tuple[str, str]]], min_occurrences: int):
         """
@@ -100,28 +92,39 @@ class FactBase(CandidateGenerator):
                                     key=lambda item: item[1], reverse=True)
         return relations
 
-    def _search_strict(self, candidates: List[str], types: List[str], description_tokens: List[str]) -> List[str]:
+    def _search_strict(self, candidates: List[str],
+                       acceptable_types: List[str], types: Dict[str, List[str]],
+                       acceptable_tokens: List[str], description_tokens: Dict[str, List[str]]) -> List[str]:
         """
         Execute a search operation on a given label restricting the results to those of an acceptable
-        type, having one of the most frequent tokens in their description values
+        type, having one of the most frequent tokens in their description values.
+        If the acceptable types (or tokens) are not given, all types (tokens) are considered as valid.
 
         :param candidates: a list of candidates from LookupResult
-        :param types: a list of acceptable types
-        :param description_tokens: a list of tokens
+        :param acceptable_types: a list of acceptable types
+        :param types: a dict uri: types
+        :param acceptable_tokens: a list of acceptable tokens
+        :param description_tokens: a dict uri: tokens
         :return: a list of candidates
         """
         refined_candidates = []
-        types_set = set(types)
-        description_tokens_set = set(description_tokens)
+        acceptable_types_set = set(acceptable_types)
+        acceptable_tokens_set = set(acceptable_tokens)
         for candidate in candidates:
-            c_tokens = set(self._get_description_tokens(candidate))
-            c_types = set(self._dbp.get_types(candidate))
-            if c_tokens & description_tokens_set and c_types & types_set:
+            type_hit = True
+            if acceptable_types:
+                type_hit = set(types[candidate]) & acceptable_types_set
+
+            token_hit = True
+            if acceptable_tokens:
+                token_hit = set(description_tokens[candidate]) & acceptable_tokens_set
+
+            if type_hit and token_hit:
                 refined_candidates.append(candidate)  # preserve ordering
 
         return refined_candidates
 
-    def _search_loose(self, label: str, relation: str, value: str) -> List[str]:
+    def _search_loose(self, label: str, relation: str, value: str, threshold: float = -1) -> List[str]:
         """
         Execute a fuzzy search (Levenshtein) and get the results for which there exist a fact <result, relation, value>.
         Return the subject with the minimal edit distance from label.
@@ -129,6 +132,7 @@ class FactBase(CandidateGenerator):
         :param label: the label to look for
         :param relation: a relation
         :param value: a value
+        :param threshold: max edit distance to consider. Set a negative value to ignore it
         :return: a list of results
         """
         candidates = []
@@ -136,8 +140,11 @@ class FactBase(CandidateGenerator):
             scores = sorted(
                 [(candidate, edit_distance(label, c_label) / max(len(label), len(c_label))) for c_label in c_labels],
                 key=lambda s: s[1])
-            if scores:
-                candidates.append(scores[0])  # keep the best label for each candidate
+            if scores:  # keep the best label for each candidate
+                if threshold < 0:
+                    candidates.append(scores[0])
+                elif scores[0][1] <= threshold:
+                    candidates.append(scores[0])
 
         return [c[0] for c in sorted(candidates, key=lambda s: s[1])]  # sort by edit distance
 
@@ -151,27 +158,29 @@ class FactBase(CandidateGenerator):
         lookup_results = dict(self._lookup_candidates(search_keys))
         generator_results = {}
 
-        all_types = []  # list of candidates types
-        desc_tokens = []  # list of tokens in candidates descriptions
+        # Pre-fetch types and description of the top candidate of each candidates set
+        candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
+        types = functools.reduce(operator.iconcat,
+                                 self._dbp.get_types_for_uris(candidates_set).values(),
+                                 [])
+        description_tokens = functools.reduce(operator.iconcat,
+                                              self._get_descriptions_tokens(candidates_set).values(),
+                                              [])
         facts = {}  # dict of possible facts in table (fact := <top_concept, ?p, support_col_value>)
 
         # First scan - raw results
         for search_key, candidates in lookup_results.items():
-            # Handle cells with some candidates (higher confidence)
-            if candidates:
-                top_result = candidates[0]
-                all_types += self._dbp.get_types(top_result)
-                desc_tokens += self._get_description_tokens(top_result)
-                # Check for relationships if there is only one candidate (very high confidence)
+            if candidates:  # Handle cells with some candidates (higher confidence)
                 if len(candidates) == 1:
                     generator_results[search_key] = GeneratorResult(search_key, candidates)
+                    # Check for relationships if there is only one candidate (very high confidence)
                     for col_id, col_value in search_key.context:
                         if col_id not in facts:
                             facts[col_id] = []
-                        facts[col_id].append((top_result, col_value))
+                        facts[col_id].append((candidates[0], col_value))
 
-        acceptable_types = self._get_most_frequent(all_types, n=5)
-        description_tokens = self._get_most_frequent(desc_tokens)
+        acceptable_types = get_most_frequent(types, n=5)
+        acceptable_tokens = get_most_frequent(description_tokens)
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
@@ -182,13 +191,20 @@ class FactBase(CandidateGenerator):
             if search_key in generator_results:
                 continue
 
-            # Strict search: filter lists of candidates by removing entities that do not match types and tokens
-            refined_candidates = self._search_strict(candidates,
-                                                     acceptable_types,
-                                                     description_tokens)
-            if refined_candidates:
-                generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
-                continue
+            if candidates:
+                # Pre-fetch types and description of all the candidates of not annotated cells
+                types = self._dbp.get_types_for_uris(candidates)
+                description_tokens = self._get_descriptions_tokens(candidates)
+
+                # Strict search: filter lists of candidates by removing entities that do not match types and tokens
+                refined_candidates = self._search_strict(candidates,
+                                                         acceptable_types,
+                                                         types,
+                                                         acceptable_tokens,
+                                                         description_tokens)
+                if refined_candidates:
+                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
+                    continue
 
             # Loose search: increase the recall by allowing a big margin of edit distance (Levenshtein)
             context_dict = dict(search_key.context)
@@ -246,10 +262,11 @@ class EmbeddingOnGraph(CandidateGenerator):
         personalization = {}  # prepare dict for pagerank with normalized priors
         embeddings = {}
         for search_key, candidates in lookup_results.items():
+            degrees = self._dbp.get_degree_for_uris(candidates)
             embeddings.update(self._w2v.get_vectors(candidates))
 
             # Filter candidates that have an embedding in w2v.
-            nodes = sorted([(candidate, {'weight': self._dbp.get_degree(candidate)})
+            nodes = sorted([(candidate, {'weight': degrees[candidate]})
                             for candidate in candidates
                             if embeddings[candidate]],
                            key=lambda x: x[1]['weight'], reverse=True)
