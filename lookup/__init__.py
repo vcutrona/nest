@@ -21,6 +21,10 @@ class LookupService(ABC):
             self.__class__.__name__,
             self._config.cache_dir()))
 
+    @property
+    def max_hits(self):
+        return self._config.max_hits
+
     def _update_cache(self, results: List[LookupResult]):
         """
         Update cache entries with new results

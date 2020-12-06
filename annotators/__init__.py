@@ -8,6 +8,7 @@ from tqdm.contrib.concurrent import process_map
 from data_model.dataset import Table, Entity
 from datasets import DatasetEnum
 from generators import EmbeddingCandidateGenerator, Generator
+from pathlib import Path
 
 
 class CEAAnnotator:
@@ -27,10 +28,14 @@ class CEAAnnotator:
         return self._generator.id
 
     def annotate_table(self, table: Table):
-        filename = os.path.join(
-                os.path.dirname(__file__),
-                'annotations',
-                '%s_%s_%s.pkl' % (self._generator.id, table.dataset_id, table.tab_id))
+
+        folder_path = os.path.join(os.path.dirname(__file__),
+                                   'annotations',
+                                   table.dataset_id,
+                                   self._generator.id)
+        Path(folder_path).mkdir(parents=True, exist_ok=True)
+
+        filename = os.path.join(folder_path, '%s.pkl' % table.tab_id)
 
         # check existing result
         if not os.path.exists(filename):

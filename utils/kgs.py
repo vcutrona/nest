@@ -4,7 +4,7 @@ from typing import Dict, Tuple, List
 
 import requests
 from SPARQLWrapper import SPARQLWrapper, JSON
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, NotFoundError
 from elasticsearch_dsl import Search, Q
 
 from data_model.kgs import DBpediaWrapperConfig
@@ -41,23 +41,26 @@ class DBpediaWrapper:
                                                       'label'), int(4e9))
 
     def _get_es_doc_by_id(self, doc_id):
-        docs = self._get_es_docs_by_ids([doc_id])
-        if docs:
-            return docs[0][1]
-        return {}
-
-    def _get_es_docs_by_ids(self, docs_ids):
         """
-        Retrieve documents from an ElasticSearch index.
-        :param docs_ids: ids of the documents to retrieve
-        :return: a dictionary Dict(doc_id: document)
+        Retrieve a document from an ElasticSearch index.
+        :param doc_id: id of the document to retrieve
+        :return: a dictionary
         """
         elastic = Elasticsearch(self._config.es_host)
-        hits = []
-        for i in range(0, len(docs_ids), 10000):  # max result window size
-            s = Search(using=elastic, index=self._config.index).query(Q('ids', values=docs_ids[i:i + 10000]))[0:10000]
-            hits = hits + [(hit.meta.id, hit.to_dict()) for hit in s.execute()]
-        return hits
+        try:
+            return elastic.get(id=doc_id, index=self._config.index)['_source']
+        except NotFoundError:
+            return {}
+
+    def _get_es_docs_by_ids(self, docs_ids: List[str]):
+        """
+        Retrieve several documents from an ElasticSearch index.
+        :param docs_ids: ids of the documents to retrieve
+        :return: a list of tuples <doc_uri: document_dict>
+        """
+        elastic = Elasticsearch(self._config.es_host)
+        return [(doc['_id'], doc['_source'])
+                for doc in elastic.mget(body={'ids': docs_ids}, index='dbpedia')['docs'] if '_source' in doc]
 
     def _get_abstracts_by_ids(self, docs_ids):
         """

@@ -19,6 +19,10 @@ class LookupServiceConfig:
     def enable_cache(self):
         return self.enable_cache
 
+    @property
+    def max_hits(self):
+        raise NotImplementedError
+
     def cache_dir(self):
         raise NotImplementedError
 
@@ -29,6 +33,10 @@ class ESLookupConfig(LookupServiceConfig):
     index: str
     size: int = 25
     enable_cache: bool = True
+
+    @property
+    def max_hits(self):
+        return self.size
 
     def cache_dir(self):
         return "index=%s__size=%d" % (self.index, self.size)
@@ -64,6 +72,10 @@ class WikipediaSearchConfig(LookupServiceConfig):
     limit: int = 10
     profile: str = 'engine_autoselect'
     enable_cache: bool = True
+
+    @property
+    def max_hits(self):
+        return self.limit
 
     def cache_dir(self):
         return "limit=%d__profile=%s" % (self.limit, self.profile)
