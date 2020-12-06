@@ -1,21 +1,19 @@
+import functools
+import operator
 import os
-from itertools import product
-from typing import List
+from typing import List, Dict
 
-import networkx as nx
 import numpy as np
-from nltk import edit_distance
 from allennlp.commands.elmo import ElmoEmbedder
 from sentence_transformers import SentenceTransformer
 
-from data_model.dataset import Table
 from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig, Embedding, FactBaseConfig, \
-    GeneratorResult, ScoredCandidate
+    GeneratorResult
 from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
-from generators.baselines import FactBase, EmbeddingOnGraph
+from generators.baselines import FactBase
 from lookup import LookupService
-from utils.functions import simplify_string, cosine_similarity
+from utils.functions import simplify_string, get_most_frequent
 from utils.nn import RDF2VecTypePredictor
 
 
@@ -136,26 +134,6 @@ class FastBert(EmbeddingCandidateGenerator):
 
 class FactBaseV2(FactBase):
 
-    def _search_loose(self, label: str, relation: str, value: str) -> List[str]:
-        """
-        Execute a fuzzy search (Levenshtein) and get the results for which there exist a fact <result, relation, value>.
-        Return the subject with the minimal edit distance from label.
-
-        :param label: the label to look for
-        :param relation: a relation
-        :param value: a value
-        :return: a list of results
-        """
-        candidates = []
-        for candidate, c_labels in self._dbp.get_subjects(relation, value).items():
-            scores = sorted(
-                [(candidate, edit_distance(label, c_label) / max(len(label), len(c_label))) for c_label in c_labels],
-                key=lambda s: s[1])
-            if scores and scores[0][1] <= 0.3:
-                candidates.append(scores[0])  # keep the best label for each candidate
-
-        return [c[0] for c in sorted(candidates, key=lambda s: s[1])]  # sort by edit distance
-
     def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
         Generate candidate for a set of search keys.
@@ -166,61 +144,72 @@ class FactBaseV2(FactBase):
         lookup_results = dict(self._lookup_candidates(search_keys))
         generator_results = {}
 
-        all_types = []  # list of candidates types
-        desc_tokens = []  # list of tokens in candidates descriptions
+        # Pre-fetch types, descriptions and labels of the top candidate of each candidates set
+        candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
+        types = functools.reduce(operator.iconcat,
+                                 self._dbp.get_types_for_uris(candidates_set).values(),
+                                 [])
+        description_tokens = functools.reduce(operator.iconcat,
+                                              self._get_descriptions_tokens(candidates_set).values(),
+                                              [])
+        labels = self._dbp.get_labels_for_uris(candidates_set)  # needed after the loose search
         facts = {}  # dict of possible facts in table (fact := <top_concept, ?p, support_col_value>)
 
         # First scan - raw results
         for search_key, candidates in lookup_results.items():
-            if candidates:
-                top_result = candidates[0]
-                all_types += self._dbp.get_types(top_result)
-                desc_tokens += self._get_description_tokens(top_result)
-                # Check for relationships if there is only one candidate (very high confidence)
+            if candidates:  # Handle cells with some candidates (higher confidence)
                 if len(candidates) == 1:
                     generator_results[search_key] = GeneratorResult(search_key, candidates)
+                    # Check for relationships if there is only one candidate (very high confidence)
                     for col_id, col_value in search_key.context:
                         if col_id not in facts:
                             facts[col_id] = []
-                        facts[col_id].append((top_result, col_value))
+                        facts[col_id].append((candidates[0], col_value))
 
-        acceptable_types = self._get_most_frequent(all_types, n=3)  # take less types
-        description_tokens = self._get_most_frequent(desc_tokens, n=3)   # take more tokens
+        acceptable_types = get_most_frequent(types, n=3)  # take less types
+        acceptable_tokens = get_most_frequent(description_tokens, n=3)  # take more tokens
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
 
         # Second scan - refinement and loose searches
         for search_key, candidates in lookup_results.items():
-
             # Skip already annotated cells
             if search_key in generator_results:
                 continue
 
-            # Strict search: filter lists of candidates by removing entities that do not match types and tokens
-            refined_candidates_strict = self._search_strict(candidates,
-                                                            acceptable_types,
-                                                            description_tokens)
-            if len(refined_candidates_strict) == 1:
-                generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
-                continue
+            if candidates:
+                # Pre-fetch types and description of all the candidates of not annotated cells
+                types = self._dbp.get_types_for_uris(candidates)
+                description_tokens = self._get_descriptions_tokens(candidates)
 
-            # Loose search: increase the recall by allowing a big margin of edit distance (Levenshtein)
-            context_dict = dict(search_key.context)
-            for col_id, relation in relations.items():
-                refined_candidates_loose = self._search_loose(search_key.label, relation, context_dict[col_id])
-                # Take candidates found with both the search strategies (strict and loose)
-                refined_candidates = [candidate for candidate in refined_candidates_loose
-                                      if candidate in refined_candidates_strict]
-                if refined_candidates:  # Annotate only if there are common candidates
-                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
-                    break
+                # Strict search: filter lists of candidates by removing entities that do not match types and tokens
+                refined_candidates_strict = self._search_strict(candidates,
+                                                                acceptable_types, types,
+                                                                acceptable_tokens, description_tokens)
+
+                if len(refined_candidates_strict) == 1:
+                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
+                    continue
+
+                # Loose search: increase the recall by allowing a big margin of edit distance (Levenshtein)
+                context_dict = dict(search_key.context)
+                for col_id, relation in relations.items():
+                    refined_candidates_loose = self._search_loose(search_key.label, relation, context_dict[col_id], 0.3)
+                    # Take candidates found with both the search strategies (strict and loose)
+                    refined_candidates = [candidate for candidate in refined_candidates_loose
+                                          if candidate in refined_candidates_strict]
+                    if refined_candidates:  # Annotate only if there are common candidates
+                        generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
+                        break
+            else:
+                refined_candidates_strict = []
 
             # Coarse- and fine-grained searches did not find common candidates:
             if search_key not in generator_results:
                 if refined_candidates_strict:  # Resort to the strict search, if there are results
                     generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
-                elif candidates and search_key.label in self._dbp.get_label(candidates[0]):  # Perfect label match
+                elif candidates and search_key.label in labels[candidates[0]]:  # Perfect label match
                     generator_results[search_key] = GeneratorResult(search_key, candidates)
                 else:  # No results
                     generator_results[search_key] = GeneratorResult(search_key, [])
@@ -234,179 +223,85 @@ class FactBaseMLType(FactBaseV2):
         super().__init__(*lookup_services, config=config)
         self._type_predictor = None
 
-    def _search_strict(self, candidates: List[str], types: List[str], description_tokens: List[str]) -> List[str]:
-        refined_candidates = []
-        types_set = set(types)
-        description_tokens_set = set(description_tokens)
-        types = self._type_predictor.predict_types(candidates, size=2)
-
-        for candidate in candidates:
-
-            if types[candidate]:  # types only
-                c_types = set(types[candidate])
-                if c_types & types_set:
-                    refined_candidates.append(candidate)  # preserve ordering
-            else:  # types and descriptions too
-                c_tokens = set(self._get_description_tokens(candidate))
-                c_types = set(self._dbp.get_types(candidate))
-                if c_tokens & description_tokens_set and c_types & types_set:
-                    refined_candidates.append(candidate)  # preserve ordering
-
-        return refined_candidates
-
     def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
         Override the parent method just to initialize the model in the parallel process
         :param search_keys:
         :return:
         """
-        if not self._type_predictor:
+        if not self._type_predictor:  # Lazy init
             self._type_predictor = RDF2VecTypePredictor()
 
         lookup_results = dict(self._lookup_candidates(search_keys))
         generator_results = {}
 
-        top_results = []  # list of top results
-        desc_tokens = []  # list of tokens in candidates descriptions
+        # Pre-fetch types and labels of the top candidate of each candidates set
+        candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
+        # Predict types using the classifier
+        types = functools.reduce(operator.iconcat,
+                                 self._type_predictor.predict_types(list(candidates_set)).values(),
+                                 [])
+        labels = self._dbp.get_labels_for_uris(candidates_set)  # needed after the loose search
         facts = {}  # dict of possible facts in table (fact := <top_concept, ?p, support_col_value>)
 
         # First scan - raw results
         for search_key, candidates in lookup_results.items():
-            if candidates:
-                top_result = candidates[0]
-                top_results += [top_result]
-                desc_tokens += self._get_description_tokens(top_result)
-                # Check for relationships if there is only one candidate (very high confidence)
+            if candidates:  # Handle cells with some candidates (higher confidence)
                 if len(candidates) == 1:
                     generator_results[search_key] = GeneratorResult(search_key, candidates)
+                    # Check for relationships if there is only one candidate (very high confidence)
                     for col_id, col_value in search_key.context:
                         if col_id not in facts:
                             facts[col_id] = []
-                        facts[col_id].append((top_result, col_value))
+                        facts[col_id].append((candidates[0], col_value))
 
-        all_types = [x for t in self._type_predictor.predict_types(top_results).values() for x in t]
-        acceptable_types = self._get_most_frequent(all_types)
-        description_tokens = self._get_most_frequent(desc_tokens, n=3)
+        acceptable_types = get_most_frequent(types)  # compute frequencies on classifier results
+        # description_tokens = self._get_most_frequent(desc_tokens, n=3)
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
 
         # Second scan - refinement and loose searches
         for search_key, candidates in lookup_results.items():
-
             # Skip already annotated cells
             if search_key in generator_results:
                 continue
 
-            # Strict search: filter lists of candidates by removing entities that do not match types and tokens
-            refined_candidates_strict = self._search_strict(candidates,
-                                                            acceptable_types,
-                                                            description_tokens)
-            if len(refined_candidates_strict) == 1:
-                generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
-                continue
+            if candidates:
+                # Pre-fetch types and description of all the candidates of not annotated cells
+                types = self._type_predictor.predict_types(list(candidates), size=2)  # consider the best two types
+                missing = [uri for uri in types if not types[uri]]
+                dbp_types = self._dbp.get_types_for_uris(missing)
+                types.update(dbp_types)
 
-            # Loose search: increase the recall by allowing a big margin of edit distance (Levenshtein)
-            context_dict = dict(search_key.context)
-            for col_id, relation in relations.items():
-                refined_candidates_loose = self._search_loose(search_key.label, relation, context_dict[col_id])
-                # Take candidates found with both the search strategies (strict and loose), loose priority
-                refined_candidates = [candidate for candidate in refined_candidates_loose
-                                      if candidate in refined_candidates_strict]
-                if refined_candidates:  # Annotate only if there are common candidates
-                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
-                    break
+                # Strict search: filter lists of candidates by removing entities that do not match types and tokens
+                refined_candidates_strict = self._search_strict(candidates,
+                                                                acceptable_types, types,
+                                                                [], {})
+                if len(refined_candidates_strict) == 1:
+                    generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
+                    continue
+
+                # Loose search: increase the recall by allowing a big margin of edit distance (Levenshtein)
+                context_dict = dict(search_key.context)
+                for col_id, relation in relations.items():
+                    refined_candidates_loose = self._search_loose(search_key.label, relation, context_dict[col_id], 0.3)
+                    # Take candidates found with both the search strategies (strict and loose)
+                    refined_candidates = [candidate for candidate in refined_candidates_loose
+                                          if candidate in refined_candidates_strict]
+                    if refined_candidates:  # Annotate only if there are common candidates
+                        generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
+                        break
+            else:
+                refined_candidates_strict = []
 
             # Coarse- and fine-grained searches did not find common candidates:
             if search_key not in generator_results:
                 if refined_candidates_strict:  # Resort to the strict search, if there are results
                     generator_results[search_key] = GeneratorResult(search_key, refined_candidates_strict)
-                elif candidates and search_key.label in self._dbp.get_label(candidates[0]):
+                elif candidates and search_key.label in labels[candidates[0]]:  # Perfect label match
                     generator_results[search_key] = GeneratorResult(search_key, candidates)
                 else:  # No results
                     generator_results[search_key] = GeneratorResult(search_key, [])
-
-        return list(generator_results.values())
-
-
-class EmbeddingOnGraphV2(EmbeddingOnGraph):
-
-    def get_candidates(self, table: Table) -> List[GeneratorResult]:
-        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
-        lookup_results = dict(self._lookup_candidates(search_keys))
-
-        # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
-        disambiguation_graph = nx.DiGraph()
-        sk_nodes = {}
-        personalization = {}  # prepare dict for pagerank with normalized priors
-        embeddings = {}
-        for search_key, candidates in lookup_results.items():
-            embeddings.update(self._w2v.get_vectors(candidates))
-
-            # Filter candidates that have an embedding in w2v.
-            nodes = sorted([(candidate, {'weight': self._dbp.get_degree(candidate)})
-                            for candidate in candidates
-                            if embeddings[candidate]],
-                           key=lambda x: x[1]['weight'], reverse=True)
-
-            # Take only the max_candidates most relevant (highest priors probability) candidates.
-            nodes = nodes[:self._config.max_candidates]
-
-            disambiguation_graph.add_nodes_from(nodes)
-            sk_nodes[search_key] = [n[0] for n in nodes]
-
-            # Store normalized priors
-            weights_sum = sum([x[1]['weight'] for x in nodes])
-            for node, props in nodes:
-                if node not in personalization:
-                    personalization[node] = []
-                personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
-
-        # Add weighted edges among the nodes in the disambiguation graph.
-        # Avoid to connect nodes in the same partition.
-        # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
-        # Only positive weights are considered.
-        for search_key, nodes in sk_nodes.items():
-            other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
-            for node, other_node in product(nodes, other_nodes):
-                v1 = np.array(embeddings[node])
-                v2 = np.array(embeddings[other_node])
-                cos_sim = cosine_similarity(v1, v2)
-                if cos_sim > 0:
-                    disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
-
-        # Thin out a fraction of edges which weights are the lowest
-        # thin_out = int(self._config.thin_out_frac * len(disambiguation_graph.edges.data("weight")))
-        # disambiguation_graph.remove_edges_from(
-        #     sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
-
-        # Page rank computaton - epsilon is increased by a factor 2 until convergence
-        page_rank = None
-        epsilon = 1e-6
-        while page_rank is None:
-            try:
-                page_rank = nx.pagerank(disambiguation_graph,
-                                        tol=epsilon, max_iter=50, alpha=0.9,
-                                        personalization={node: np.mean(weights)
-                                                         for node, weights in personalization.items()})
-            except nx.PowerIterationFailedConvergence:
-                epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
-
-        # Sort candidates -> the higher the score, the better the candidate (reverse=True)
-        generator_results = {}
-        for search_key, candidates in sk_nodes.items():
-            # if len(candidates) == 1:
-            #     generator_results[search_key] = GeneratorResult(search_key, candidates)
-            scored_candidates = sorted([ScoredCandidate(candidate, page_rank[candidate])
-                             for candidate in candidates], reverse=True)
-            if scored_candidates:
-                score = [cand.score for cand in scored_candidates]
-                threshold = np.mean(score) + np.std(score)  # * 0.6 try adding alpha on std to increase precision
-                if len(scored_candidates) > 1:
-                    if scored_candidates[1].score < threshold:
-                        generator_results[search_key] = GeneratorResult(search_key, [scored_candidates[0].candidate])
-                else:
-                    generator_results[search_key] = GeneratorResult(search_key, [cand.candidate
-                                                                                 for cand in scored_candidates])
 
         return list(generator_results.values())

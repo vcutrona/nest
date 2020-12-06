@@ -1,3 +1,4 @@
+annotators/annotations
 cache/
 datasets/*
 !datasets/*.py

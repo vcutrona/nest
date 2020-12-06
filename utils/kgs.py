@@ -40,17 +40,17 @@ class DBpediaWrapper:
         self._label_cache = CacheWrapper(os.path.join(os.path.dirname(__file__), '.cache', 'DBpediaWrapper',
                                                       'label'), int(4e9))
 
-    def _get_es_doc_by_id(self, doc_id):
-        """
-        Retrieve a document from an ElasticSearch index.
-        :param doc_id: id of the document to retrieve
-        :return: a dictionary
-        """
-        elastic = Elasticsearch(self._config.es_host)
-        try:
-            return elastic.get(id=doc_id, index=self._config.index)['_source']
-        except NotFoundError:
-            return {}
+    # def _get_es_doc_by_id(self, doc_id):
+    #     """
+    #     Retrieve a document from an ElasticSearch index.
+    #     :param doc_id: id of the document to retrieve
+    #     :return: a dictionary
+    #     """
+    #     elastic = Elasticsearch(self._config.es_host)
+    #     try:
+    #         return elastic.get(id=doc_id, index=self._config.index)['_source']
+    #     except NotFoundError:
+    #         return {}
 
     def _get_es_docs_by_ids(self, docs_ids: List[str]):
         """
@@ -58,6 +58,8 @@ class DBpediaWrapper:
         :param docs_ids: ids of the documents to retrieve
         :return: a list of tuples <doc_uri: document_dict>
         """
+        if not docs_ids:
+            return []
         elastic = Elasticsearch(self._config.es_host)
         return [(doc['_id'], doc['_source'])
                 for doc in elastic.mget(body={'ids': docs_ids}, index='dbpedia')['docs'] if '_source' in doc]
@@ -70,20 +72,37 @@ class DBpediaWrapper:
         """
         return {doc_id: doc['description'] for doc_id, doc in self._get_es_docs_by_ids(docs_ids)}
 
-    def get_label(self, uri):
+    def _get_attribute_for_uris(self, uris, attribute, default_value):
         """
-        Returns the labels of a DBpedia entity.
+        Helper method that gets an attribute from a list of documents.
+        :param uris: a list of URIs
+        :param attribute: an attribute of the indexed document
+        :param default_value: value to set if the selected attribute is missing
+        :return: a dict uri: values
+        """
+        docs = self._get_es_docs_by_ids(uris)
+        attributes = {}
+        for uri, doc in docs:
+            if attribute in doc:
+                attributes[uri] = doc[attribute]
+        for uri in uris:
+            if uri not in attributes:
+                attributes[uri] = default_value
+        return attributes
 
-        :param uri: an entity URI
-        :return: a list of labels
+    def get_labels_for_uris(self, uris):
         """
-        doc = self._get_es_doc_by_id(uri)
-        if 'surface_form_keyword' in doc:
-            return doc['surface_form_keyword']
-        else:
+        Returns the labels of DBpedia entities.
+
+        :param uris: a list of URIs
+        :return: a dict uri: labels
+        """
+        labels = self._get_attribute_for_uris(uris, 'surface_form_keyword', [])
+        missing = [uri for uri in labels if not labels[uri]]
+        for uri in missing:  # TODO bulk query with VALUES
             cached = self._label_cache.get_cached_entry(uri)
             if cached:
-                return cached
+                labels[uri] = cached
             self._sparql.setQuery("""
                     SELECT distinct ?label
                     WHERE {
@@ -94,7 +113,8 @@ class DBpediaWrapper:
             result = [result["label"]["value"]
                       for result in self._sparql.query().convert()["results"]["bindings"]]
             self._label_cache.set_entry(KVPair(uri, result))
-            return result
+            labels[uri] = result
+        return labels
 
     def fetch_long_abstracts(self, uris):
         """
@@ -128,8 +148,8 @@ class DBpediaWrapper:
         :param uris: list of URIs
         :return: a dictionary Dict(uri, abstract)
         """
-        return {doc_id: doc['description'][0] if 'description' in doc and doc['description'] else ''
-                for doc_id, doc in self._get_es_docs_by_ids(uris)}
+        return {uri: abstracts[0] if abstracts else ''
+                for uri, abstracts in self._get_attribute_for_uris(uris, 'description', '').items()}
 
     def get_relations(self, subj_obj_pairs: List[Tuple[str, str]],
                       filter_blacklisted=True) -> Dict[Tuple[str, str], List[str]]:
@@ -180,18 +200,16 @@ class DBpediaWrapper:
             results.update(dict(cached_entries))
         return results
 
-    def get_types(self, uri):
+    def get_types_for_uris(self, uris):
         """
-        Get the types of the given entity
+        Get the types of a given list of entities
 
-        :param uri: the entity URI
-        :return: a list of types (URIs)
+        :param uris: a list of URIs
+        :return: a dict uri: types
         """
-        doc = self._get_es_doc_by_id(uri)
-        if 'type' in doc:
-            types = [t for t in doc['type'] if t not in TYPES_BLACKLIST]
-            # if types:
-            return types
+        # TODO filter out extra types
+        return {uri: [t for t in types if t not in TYPES_BLACKLIST]
+                for uri, types in self._get_attribute_for_uris(uris, 'type', []).items()}
 
         # no type in index -> check online
         # cached = self._type_cache.get_cached_entry(uri)
@@ -207,68 +225,53 @@ class DBpediaWrapper:
         # result = [result["type"]["value"]
         #           for result in self._sparql.query().convert()["results"]["bindings"]]
         # self._label_cache.set_entry(KVPair(uri, result))
-        # return result
-        return []
 
-    def get_descriptions(self, uri):
+    def get_descriptions_for_uris(self, uris):
         """
-        Get the descriptions of the given entity
+        Get the descriptions of a given list of entities
 
-        :param uri: the entity URI
-        :return: a list of descriptions
+        :param uris: a list of URIs
+        :return: a dict uri: descriptions
         """
-        doc = self._get_es_doc_by_id(uri)
-        if 'description' in doc:
-            return doc['description']
-        return []
+        return self._get_attribute_for_uris(uris, 'description', [])
 
-    def get_uri_count(self, uri):
+    def get_uri_count_for_uris(self, uris):
         """
-        Get the uri_count field of a ES document (from Spotlight lexicalizations)
+        Get the uri_count field of a list of documents (from Spotlight lexicalizations)
 
-        :param uri: the entity URI
-        :return: the uri_count value
+        :param uris: a list of URIs
+        :return: the dict uri: uri_count
         """
-        doc = self._get_es_doc_by_id(uri)
-        if 'uri_count' in doc:
-            return doc['uri_count']
-        return 0
+        return self._get_attribute_for_uris(uris, 'uri_count', 0)
 
-    def get_in_degree(self, uri):
+    def get_in_degree_for_uris(self, uris):
         """
-        Get the in_degree field of a ES document (from DBpedia Page Links)
+        Get the in_degree field a list of documents (from DBpedia Page Links)
 
-        :param uri: the entity URI
-        :return: the in_degree value
+        :param uris: a list of URIs
+        :return: a dict uri: in_degree
         """
-        doc = self._get_es_doc_by_id(uri)
-        if 'in_degree' in doc:
-            return doc['in_degree']
-        return 0
+        return self._get_attribute_for_uris(uris, 'in_degree', 0)
 
-    def get_out_degree(self, uri):
+    def get_out_degree_for_uris(self, uris):
         """
-        Get the out_degree field of a ES document (from DBpedia Page Links)
+        Get the out_degree field a list of documents (from DBpedia Page Links)
 
-        :param uri: the entity URI
-        :return: the out_degree value
+        :param uris: a list of URIs
+        :return: a dict uri: out_degree
         """
-        doc = self._get_es_doc_by_id(uri)
-        if 'out_degree' in doc:
-            return doc['out_degree']
-        return 0
+        return self._get_attribute_for_uris(uris, 'out_degree', 0)
 
-    def get_degree(self, uri):
+    def get_degree_for_uris(self, uris):
         """
-        Get the degree (in+out) of a ES document (from DBpedia Page Links)
+        Get the degree (in+out) a list of documents (from DBpedia Page Links)
 
-        :param uri: the entity URI
-        :return: the degree value
+        :param uris: a list of URIs
+        :return: a dict uri: degree
         """
-        doc = self._get_es_doc_by_id(uri)
-        if 'out_degree' in doc and 'in_degree' in doc:
-            return doc['out_degree'] + doc['in_degree']
-        return 0
+        in_degrees = self.get_in_degree_for_uris(uris)
+        out_degrees = self.get_out_degree_for_uris(uris)
+        return {uri: in_degrees[uri] + out_degrees[uri] for uri in uris}
 
     def get_subjects(self, prop: str, value: str) -> Dict[str, List[str]]:
         """

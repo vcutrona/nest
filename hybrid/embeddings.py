@@ -1,15 +1,14 @@
 import ast
-import time
-
-import pandas as pd
-import numpy as np
 import csv
-import networkx as nx
-from numpy import dot
-from gensim import matutils
 from collections import defaultdict
 
-from functions import simplify_string, tokenize
+import networkx as nx
+import numpy as np
+import pandas as pd
+from gensim import matutils
+from numpy import dot
+
+from utils.functions import simplify_string
 
 
 def sfi_to_ste(surface_form_index_complete, surface_form_index, w2v):
