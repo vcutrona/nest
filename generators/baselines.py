@@ -247,7 +247,7 @@ class EmbeddingOnGraph(CandidateGenerator):
 
     def __init__(self, *lookup_services: LookupService,
                  config: EmbeddingOnGraphConfig = EmbeddingOnGraphConfig(max_subseq_len=0,
-                                                                         max_candidates=5,
+                                                                         max_candidates=8,
                                                                          thin_out_frac=0.25)):
         super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
@@ -316,9 +316,7 @@ class EmbeddingOnGraph(CandidateGenerator):
 
         # Sort candidates -> the higher the score, the better the candidate (reverse=True)
         return [GeneratorResult(search_key,
-                                [c.candidate for c in sorted(
-                                    [ScoredCandidate(candidate, page_rank[candidate])
-                                     for candidate in candidates if candidate in page_rank],
-                                    reverse=True)
-                                 ])
-                for search_key, candidates in lookup_results.items()]
+                                [c.candidate for c in sorted([ScoredCandidate(candidate, page_rank[candidate])
+                                                              for candidate in candidates],
+                                                             reverse=True)])
+                for search_key, candidates in sk_nodes.items()]

@@ -1,19 +1,24 @@
 import functools
 import operator
 import os
+
+from itertools import product
 from typing import List
 
+import networkx as nx
 import numpy as np
 from allennlp.commands.elmo import ElmoEmbedder
 from sentence_transformers import SentenceTransformer
 
+from data_model.dataset import Table
 from data_model.generator import EmbeddingCandidateGeneratorConfig, FastBertConfig, Embedding, FactBaseConfig, \
-    GeneratorResult
+    GeneratorResult, ScoredCandidate, EmbeddingOnGraphConfig
 from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
-from generators.baselines import FactBase
+from generators.baselines import FactBase, EmbeddingOnGraph
 from lookup import LookupService
-from utils.functions import simplify_string, get_most_frequent
+from utils.embeddings import RDF2Vec, TEE
+from utils.functions import get_most_frequent, cosine_similarity, simplify_string
 from utils.nn import RDF2VecTypePredictor
 
 
@@ -239,7 +244,7 @@ class FactBaseMLType(FactBaseV2):
         candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
         # Predict types using the classifier
         types = functools.reduce(operator.iconcat,
-                                 self._type_predictor.predict_types(list(candidates_set)).values(),
+                                 self._type_predictor.predict_types(candidates_set).values(),
                                  [])
         labels = self._dbp.get_labels_for_uris(candidates_set)  # needed after the loose search
         facts = {}  # dict of possible facts in table (fact := <top_concept, ?p, support_col_value>)
@@ -305,3 +310,265 @@ class FactBaseMLType(FactBaseV2):
                     generator_results[search_key] = GeneratorResult(search_key, [])
 
         return list(generator_results.values())
+
+
+class EmbeddingOnGraphV2(EmbeddingOnGraph):
+
+    def __init__(self, *lookup_services: LookupService, config: EmbeddingOnGraphConfig):
+        super().__init__(*lookup_services, config=config)
+        self._w2v = RDF2Vec()
+        self._type_predictor = None
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        if not self._type_predictor:  # Lazy init
+            self._type_predictor = RDF2VecTypePredictor()
+
+        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
+        lookup_results = dict(self._lookup_candidates(search_keys))
+
+        # Pre-fetch types of the top candidate of each candidates set
+        candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
+        # Predict types using the classifier
+        types = functools.reduce(operator.iconcat,
+                                 self._type_predictor.predict_types(candidates_set).values(),
+                                 [])
+        acceptable_types = get_most_frequent(types)
+
+        # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
+        disambiguation_graph = nx.DiGraph()
+        sk_nodes = {}
+        personalization = {}  # prepare dict for pagerank with normalized priors
+        embeddings = {}
+
+        for search_key, candidates in lookup_results.items():
+            degrees = self._dbp.get_degree_for_uris(candidates)
+            embeddings.update(self._w2v.get_vectors(candidates))
+
+            # Filter candidates that have an embedding in w2v.
+            nodes = sorted([(candidate, {'weight': degrees[candidate]})
+                            for candidate in candidates
+                            if embeddings[candidate]
+                            if set(acceptable_types) &
+                            set(self._type_predictor.predict_types([candidate], size=2)[candidate])],
+                           key=lambda x: x[1]['weight'], reverse=True)
+
+            # Take only the max_candidates most relevant (highest priors probability) candidates.
+            nodes = nodes[:self._config.max_candidates]
+            disambiguation_graph.add_nodes_from(nodes)
+            sk_nodes[search_key] = [n[0] for n in nodes]
+
+            # Store normalized priors
+            weights_sum = sum([x[1]['weight'] for x in nodes])
+            for node, props in nodes:
+                if node not in personalization:
+                    personalization[node] = []
+                personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
+
+        # Add weighted edges among the nodes in the disambiguation graph.
+        # Avoid to connect nodes in the same partition.
+        # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
+        # Only positive weights are considered.
+        for search_key, nodes in sk_nodes.items():
+            other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
+            for node, other_node in product(nodes, other_nodes):
+                v1 = embeddings[node]
+                v2 = embeddings[other_node]
+                cos_sim = cosine_similarity(v1, v2)
+                if cos_sim > 0:
+                    disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
+
+        # Page rank computaton - epsilon is increased by a factor 2 until convergence
+        page_rank = None
+        epsilon = 1e-6
+        while page_rank is None:
+            try:
+                page_rank = nx.pagerank(disambiguation_graph,
+                                        tol=epsilon, max_iter=50, alpha=0.9,
+                                        personalization={node: np.mean(weights)
+                                                         for node, weights in personalization.items()})
+
+            except nx.PowerIterationFailedConvergence:
+                epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
+        # Sort candidates -> the higher the score, the better the candidate (reverse=True)
+        return [GeneratorResult(search_key,
+                                [c.candidate for c in sorted([ScoredCandidate(candidate, page_rank[candidate])
+                                                              for candidate in candidates],
+                                                             reverse=True)])
+                for search_key, candidates in sk_nodes.items()]
+
+
+class EmbeddingOnGraphMLType(EmbeddingOnGraph):
+
+    def __init__(self, *lookup_services: LookupService, config: EmbeddingOnGraphConfig):
+        super().__init__(*lookup_services, config=config)
+        self._w2v = RDF2Vec()
+        self._type_predictor = None
+        self._tee = TEE()
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        if not self._type_predictor:  # Lazy init
+            self._type_predictor = RDF2VecTypePredictor()
+
+        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
+        lookup_results = dict(self._lookup_candidates(search_keys))
+
+        # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
+        disambiguation_graph = nx.DiGraph()
+        sk_nodes = {}
+        personalization = {}  # prepare dict for pagerank with normalized priors
+        embeddings = {}
+
+        for search_key, candidates in lookup_results.items():
+            degrees = self._dbp.get_degree_for_uris(candidates)
+            embeddings.update(self._w2v.get_vectors(candidates))
+
+            # Filter candidates that have an embedding in w2v.
+            nodes = sorted([(candidate, {'weight': degrees[candidate]})
+                            for candidate in candidates
+                            if embeddings[candidate]],
+                           key=lambda x: x[1]['weight'], reverse=True)
+
+            # Take only the max_candidates most relevant (highest priors probability) candidates.
+            nodes = nodes[:self._config.max_candidates]
+            disambiguation_graph.add_nodes_from(nodes)
+            sk_nodes[search_key] = [n[0] for n in nodes]
+
+            # Store normalized priors
+            weights_sum = sum([x[1]['weight'] for x in nodes])
+            for node, props in nodes:
+                if node not in personalization:
+                    personalization[node] = []
+                personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
+
+        # Add weighted edges among the nodes in the disambiguation graph.
+        # Avoid to connect nodes in the same partition.
+        # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
+        # Only positive weights are considered.
+        for search_key, nodes in sk_nodes.items():
+            nodes_type = self._type_predictor.predict_types(nodes)
+            other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
+            other_nodes_type = self._type_predictor.predict_types(other_nodes)
+            type_embeddings = self._tee.get_vectors(list(nodes_type) + list(other_nodes_type))
+            for node, other_node in product(nodes, other_nodes):
+                v1 = np.concatenate(embeddings[node], type_embeddings[nodes_type[node][0]])
+                v2 = np.concatenate(embeddings[other_node], type_embeddings(other_nodes_type[node][0]))
+                cos_sim = cosine_similarity(v1, v2)
+                if cos_sim > 0:
+                    disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
+
+        # Page rank computaton - epsilon is increased by a factor 2 until convergence
+        page_rank = None
+        epsilon = 1e-6
+        while page_rank is None:
+            try:
+                page_rank = nx.pagerank(disambiguation_graph,
+                                        tol=epsilon, max_iter=50, alpha=0.9,
+                                        personalization={node: np.mean(weights)
+                                                         for node, weights in personalization.items()})
+
+            except nx.PowerIterationFailedConvergence:
+                epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
+        # Sort candidates -> the higher the score, the better the candidate (reverse=True)
+        return [GeneratorResult(search_key,
+                                [c.candidate for c in sorted([ScoredCandidate(candidate, page_rank[candidate])
+                                                              for candidate in candidates],
+                                                             reverse=True)])
+                for search_key, candidates in sk_nodes.items()]
+
+
+# ITERATIVE PAGERANK DO NOT SEEM IMPROVE RESULTS ON T2D -> LOT OF ANNOTATIONS PROVIDED ALREADY FROM 1st ITERATION
+#
+# class EmbeddingOnGraphV2(EmbeddingOnGraph):
+#
+#     def __init__(self, *lookup_services: LookupService, config: EmbeddingOnGraphConfig):
+#         super().__init__(*lookup_services, config=config)
+#         self._iterations: int = 2
+#
+#     def get_candidates(self, table: Table) -> List[GeneratorResult]:
+#         search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
+#         lookup_results = dict(self._lookup_candidates(search_keys))
+#         generator_results = {}
+#         embeddings = {}
+#
+#         assert self._iterations > 0
+#         for search_key, candidates in lookup_results.items():
+#             embeddings.update(self._w2v.get_vectors(candidates))
+#         for i in range(0, self._iterations):
+#             # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
+#             disambiguation_graph = nx.DiGraph()
+#             sk_nodes = {}
+#             personalization = {}  # prepare dict for pagerank with normalized priors
+#             if not [sk for sk, x in lookup_results.items() if sk not in generator_results]:  # if empty -> finish
+#                 break
+#
+#             for search_key, candidates in lookup_results.items():
+#
+#                 if search_key not in generator_results:
+#                     # Filter candidates that have an embedding in w2v.
+#                     nodes = sorted([(candidate, {'weight': self._dbp.get_degree(candidate)})
+#                                     for candidate in candidates
+#                                     if embeddings[candidate]],
+#                                    key=lambda x: x[1]['weight'], reverse=True)
+#                     alpha = 1
+#                     if i == self._iterations - 1:
+#                         alpha = 2
+#                     # Take only the max_candidates most relevant (highest priors probability) candidates.
+#                     nodes = nodes[:self._config.max_candidates * alpha]
+#                 else:
+#                     # Filter candidates that have an embedding in w2v.
+#                     nodes = [(generator_results[search_key].candidates[0],
+#                               {'weight': self._dbp.get_degree(generator_results[search_key].candidates[0])})]
+#
+#                 disambiguation_graph.add_nodes_from(nodes)
+#                 sk_nodes[search_key] = [n[0] for n in nodes]
+#
+#                 # Store normalized priors
+#                 weights_sum = sum([x[1]['weight'] for x in nodes])
+#                 for node, props in nodes:
+#                     if node not in personalization:
+#                         personalization[node] = []
+#                     personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
+#
+#             # Add weighted edges among the nodes in the disambiguation graph.
+#             # Avoid to connect nodes in the same partition.
+#             # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
+#             # Only positive weights are considered.
+#             for search_key, nodes in sk_nodes.items():
+#                 other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
+#                 for node, other_node in product(nodes, other_nodes):
+#                     v1 = embeddings[node]
+#                     v2 = embeddings[other_node]
+#                     cos_sim = cosine_similarity(v1, v2)
+#                     if cos_sim > 0:
+#                         disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
+#
+#             # Page rank computaton - epsilon is increased by a factor 2 until convergence
+#             page_rank = None
+#             epsilon = 1e-6
+#             while page_rank is None:
+#                 try:
+#                     page_rank = nx.pagerank(disambiguation_graph,
+#                                             tol=epsilon, max_iter=50, alpha=0.9,
+#                                             personalization={node: np.mean(weights)
+#                                                              for node, weights in personalization.items()})
+#                 except nx.PowerIterationFailedConvergence:
+#                     epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
+#
+#             # Sort candidates -> the higher the score, the better the candidate (reverse=True)
+#             for search_key, candidates in sk_nodes.items():
+#                 scored_candidates = sorted([ScoredCandidate(candidate, page_rank[candidate])
+#                                             for candidate in candidates], reverse=True)
+#                 if i == self._iterations - 1:
+#                     generator_results[search_key] = GeneratorResult(search_key,
+#                                                                     [c.candidate for c in scored_candidates])
+#                     continue
+#
+#                 if len(candidates) == 1:
+#                     generator_results[search_key] = GeneratorResult(search_key, candidates)
+#                 elif len(candidates) >= 3:  # at least 3 because threshold=best with only 2 candidates
+#                     score = [candidate.score for candidate in scored_candidates]
+#                     threshold = np.mean(score) + np.std(score) * 0.5  # * 0.5 try multiply std by alpha(<1) to increase precision
+#                     if scored_candidates[1].score < threshold:  # if 2nd-best is lower than threshold -> 1st correct
+#                         generator_results[search_key] = GeneratorResult(search_key, [scored_candidates[0].candidate])
+#
+#         return list(generator_results.values())
