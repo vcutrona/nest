@@ -450,8 +450,8 @@ class EmbeddingOnGraphMLType(EmbeddingOnGraph):
             other_nodes_type = self._type_predictor.predict_types(other_nodes)
             type_embeddings = self._tee.get_vectors(list(nodes_type) + list(other_nodes_type))
             for node, other_node in product(nodes, other_nodes):
-                v1 = np.concatenate(embeddings[node], type_embeddings[nodes_type[node][0]])
-                v2 = np.concatenate(embeddings[other_node], type_embeddings(other_nodes_type[node][0]))
+                v1 = np.concatenate([embeddings[node], type_embeddings[nodes_type[node][0]]])
+                v2 = np.concatenate([embeddings[other_node], type_embeddings[other_nodes_type[node][0]]])
                 cos_sim = cosine_similarity(v1, v2)
                 if cos_sim > 0:
                     disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
