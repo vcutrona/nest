@@ -39,7 +39,7 @@ class RDF2VecTypePredictor:
 
     def predict_types(self, uris, size=1):
         types = {}
-        rdf2vectors = {k: v for k, v in self._r2v.get_vectors(uris).items() if v}
+        rdf2vectors = {k: v for k, v in self._r2v.get_vectors(uris).items() if v is not None}
         vectors = np.array(list(rdf2vectors.values()))
         if vectors.size > 0:
             pred = self._model.predict(vectors)

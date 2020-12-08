@@ -65,7 +65,7 @@ def filter_sfi(surface_form_index_complete, surface_form_index, w2v):
 
             embedding = w2v.get_vectors([entity for entity, sf_forms, count in data])
             writer.writerows([[entity, sf_forms, count]
-                              for entity, sf_forms, count in data if embedding[entity]])
+                              for entity, sf_forms, count in data if embedding[entity] is not None])
 
             filew.close()
         surface_form_index_file.close()

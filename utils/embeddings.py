@@ -7,7 +7,7 @@ from gensim.models import KeyedVectors
 
 
 class EmbeddingModel:
-    def get_vectors(self, uris):
+    def get_vectors(self, uris: List[str]):
         """
         Get vectors for the given URIs
         :param uris: a list of URIs

@@ -440,7 +440,7 @@ class EmbeddingOnGraphV2(EmbeddingOnGraph):
             # Filter candidates that have an embedding in w2v.
             nodes = sorted([(candidate, {'weight': degrees[candidate]})
                             for candidate in candidates
-                            if embeddings[candidate]
+                            if embeddings[candidate] is not None
                             if set(acceptable_types) &
                             set(self._type_predictor.predict_types([candidate], size=2)[candidate])],
                            key=lambda x: x[1]['weight'], reverse=True)
@@ -518,7 +518,7 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
             # Filter candidates that have an embedding in w2v.
             nodes = sorted([(candidate, {'weight': degrees[candidate]})
                             for candidate in candidates
-                            if embeddings[candidate]],
+                            if embeddings[candidate] is not None],
                            key=lambda x: x[1]['weight'], reverse=True)
 
             # Take only the max_candidates most relevant (highest priors probability) candidates.
@@ -600,7 +600,7 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
 #                     # Filter candidates that have an embedding in w2v.
 #                     nodes = sorted([(candidate, {'weight': self._dbp.get_degree(candidate)})
 #                                     for candidate in candidates
-#                                     if embeddings[candidate]],
+#                                     if embeddings[candidate] is not None],
 #                                    key=lambda x: x[1]['weight'], reverse=True)
 #                     alpha = 1
 #                     if i == self._iterations - 1:
