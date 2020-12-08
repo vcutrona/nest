@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import os
 import pickle
+import gc
 
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
@@ -62,6 +63,8 @@ class CEAAnnotator:
                         table.annotate_cell(cell, Entity(candidates[0]))  # first candidate = best
 
             pickle.dump(table, open(filename, 'wb'))
+
+            gc.collect()
 
         return pickle.load(open(filename, 'rb'))
 
