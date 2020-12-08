@@ -2,7 +2,8 @@ import pickle
 
 import numpy as np
 
-from utils.kgs import KGEmbedding, TYPES_BLACKLIST
+from utils.embeddings import RDF2Vec
+from utils.kgs import TYPES_BLACKLIST
 
 
 class RDF2VecTypePredictor:
@@ -34,7 +35,7 @@ class RDF2VecTypePredictor:
         self._model.load_weights('knowledge_lh.keras')
 
         self._classes = pickle.load(open('classes_list.pkl', 'rb'))
-        self._r2v = KGEmbedding.RDF2VEC
+        self._r2v = RDF2Vec()
 
     def predict_types(self, uris, size=1):
         types = {}

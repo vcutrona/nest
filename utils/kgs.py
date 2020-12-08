@@ -1,11 +1,8 @@
 import os
-from enum import Enum
 from typing import Dict, Tuple, List
 
-import requests
 from SPARQLWrapper import SPARQLWrapper, JSON
-from elasticsearch import Elasticsearch, NotFoundError
-from elasticsearch_dsl import Search, Q
+from elasticsearch import Elasticsearch
 
 from data_model.kgs import DBpediaWrapperConfig
 from utils.caching import CacheWrapper, KVPair
@@ -325,18 +322,3 @@ class DBpediaWrapper:
 
         self._subj_cache.set_entry(KVPair((prop, value), results))
         return results
-
-
-class KGEmbedding(Enum):
-    RDF2VEC = 'http://localhost:5999/r2v/uniform'
-    WORD2VEC = 'http://localhost:5998/w2v/dbp-300'
-
-    def get_vectors(self, uris):
-        """
-        Get vectors for the given URIs
-        :param uris: a DBpedia resource URI, or a list of DBpedia resource URIs
-        :return: a dict {<uri>: <vec>}. <vec> is None if it does not exist a vector for <uri>.
-        """
-        data = {'uri': uris}
-        response = requests.get(self.value, params=data)
-        return response.json()

@@ -1,7 +1,7 @@
 import functools
 import operator
 import os
-from typing import List, Dict
+from typing import List
 
 import numpy as np
 from allennlp.commands.elmo import ElmoEmbedder

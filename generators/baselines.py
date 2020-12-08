@@ -15,8 +15,9 @@ from data_model.generator import GeneratorResult, FactBaseConfig, EmbeddingOnGra
 from data_model.lookup import SearchKey
 from generators import CandidateGenerator
 from lookup import LookupService
+from utils.embeddings import WORD2Vec
 from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity, chunk_list, get_most_frequent
-from utils.kgs import DBpediaWrapper, KGEmbedding
+from utils.kgs import DBpediaWrapper
 
 
 class LookupGenerator(CandidateGenerator):
@@ -250,7 +251,7 @@ class EmbeddingOnGraph(CandidateGenerator):
                                                                          thin_out_frac=0.25)):
         super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
-        self._w2v = KGEmbedding.WORD2VEC
+        self._w2v = WORD2Vec()
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
         search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
@@ -290,8 +291,8 @@ class EmbeddingOnGraph(CandidateGenerator):
         for search_key, nodes in sk_nodes.items():
             other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
             for node, other_node in product(nodes, other_nodes):
-                v1 = np.array(embeddings[node])
-                v2 = np.array(embeddings[other_node])
+                v1 = embeddings[node]
+                v2 = embeddings[other_node]
                 cos_sim = cosine_similarity(v1, v2)
                 if cos_sim > 0:
                     disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])

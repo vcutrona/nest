@@ -3,12 +3,12 @@ import pickle
 import time
 from ngram import NGram
 from tqdm.contrib.concurrent import process_map
-from kgs import KGEmbedding
 
-from functions import simplify_string, tokenize
+from utils.functions import simplify_string, tokenize
 
 from embeddings import sfi_to_ste, get_labels, generate_candidates, \
     disambiguate_entities, add_edges, normalize_priors, thin_out, page_rank, best_annotation, annotate
+from utils.embeddings import WORD2Vec
 
 
 def embeddings_efthy(table):
@@ -33,7 +33,7 @@ target = datasets_dir + 'targets/CEA_T2D_Targets.csv'
 target_table = pd.read_csv(target)
 annotated_table = target_table.copy()
 tables = [table for tab_id, table in target_table.groupby('tab_id')]
-w2v = KGEmbedding.WORD2VEC
+w2v = WORD2Vec()
 
 # surface_to_entities = sfi_to_ste(base_dir + 'surfaceFormIndexComplete.csv',
 #                                  base_dir + 'surfaceFormIndex.csv', w2v)  # convert

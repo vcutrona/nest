@@ -162,7 +162,7 @@ def filter_candidates(index_surface_form, entity_candidates, embeddings, n=3):
     :param n: the number of candidates to return
     :return: a list of weighted entity candidates and their embeddings
     """
-    return [(entity, {'weight': weight, 'embedding': np.array(embeddings[entity])})
+    return [(entity, {'weight': weight, 'embedding': embeddings[entity]})
             for entity, weight in
             sorted(entity_candidates.get(index_surface_form).nodes.data('weight'),
                    key=lambda item: item[1], reverse=True)
