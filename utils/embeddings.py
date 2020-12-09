@@ -27,7 +27,7 @@ class EmbeddingModelService(EmbeddingModel):
         """
         data = {'uri': uris}
         response = requests.get(self._url, params=data)
-        return {uri: np.array(vec) if vec else None for uri, vec in response.json().items()}
+        return {uri: np.array(vec) if vec else np.array([None]) for uri, vec in response.json().items()}
 
 
 class RDF2Vec(EmbeddingModelService):
@@ -50,7 +50,7 @@ class OWL2Vec(EmbeddingModel):
         :param uris: a DBpedia class URI, or a list of DBpedia class URIs
         :return: a dict {<uri>: <vec>}. <vec> is None if it does not exist a vector for <uri>.
         """
-        return {uri: self._model[uri] if uri in self._model else None for uri in uris}
+        return {uri: self._model[uri] if uri in self._model else np.array([None]) for uri in uris}
 
 
 class TEE(EmbeddingModel):
@@ -69,6 +69,6 @@ class TEE(EmbeddingModel):
             if entity in self._model:
                 vectors[uri] = self._model[entity]
             else:
-                vectors[uri] = None
+                vectors[uri] = np.array([None])
 
         return vectors

@@ -17,7 +17,7 @@ from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
 from generators.baselines import FactBase, EmbeddingOnGraph
 from lookup import LookupService
-from utils.embeddings import RDF2Vec, TEE
+from utils.embeddings import RDF2Vec, TEE, OWL2Vec
 from utils.functions import get_most_frequent, cosine_similarity, simplify_string
 from utils.nn import RDF2VecTypePredictor
 
@@ -326,7 +326,7 @@ class EmbeddingOnGraphV2(EmbeddingOnGraph):
         search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
 
-        # Pre-fetch types of the top candidate of each candidates set
+        # Pre-fetch the top candidate of each candidates set
         candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
         # Predict types using the classifier
         types = functools.reduce(operator.iconcat,
@@ -425,7 +425,7 @@ class EmbeddingOnGraphMLType(EmbeddingOnGraph):
             # Filter candidates that have an embedding in w2v.
             nodes = sorted([(candidate, {'weight': degrees[candidate]})
                             for candidate in candidates
-                            if embeddings[candidate]],
+                            if embeddings[candidate].all()],
                            key=lambda x: x[1]['weight'], reverse=True)
 
             # Take only the max_candidates most relevant (highest priors probability) candidates.
@@ -440,21 +440,24 @@ class EmbeddingOnGraphMLType(EmbeddingOnGraph):
                     personalization[node] = []
                 personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
 
+        # Predict types using the classifier
+        node_types = self._type_predictor.predict_types([node for nodes in list(sk_nodes.values()) for node in nodes])
+        # Get type embeddings. Set is used to remove duplicate
+        type_embeddings = self._tee.get_vectors(list({t for types in list(node_types.values()) for t in types}))
+
         # Add weighted edges among the nodes in the disambiguation graph.
         # Avoid to connect nodes in the same partition.
         # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
         # Only positive weights are considered.
         for search_key, nodes in sk_nodes.items():
-            nodes_type = self._type_predictor.predict_types(nodes)
             other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
-            other_nodes_type = self._type_predictor.predict_types(other_nodes)
-            type_embeddings = self._tee.get_vectors(list(nodes_type) + list(other_nodes_type))
             for node, other_node in product(nodes, other_nodes):
-                v1 = np.concatenate([embeddings[node], type_embeddings[nodes_type[node][0]]])
-                v2 = np.concatenate([embeddings[other_node], type_embeddings[other_nodes_type[node][0]]])
-                cos_sim = cosine_similarity(v1, v2)
-                if cos_sim > 0:
-                    disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
+                if type_embeddings[node_types[node][0]].all() and type_embeddings[node_types[other_node][0]].all():
+                    v1 = np.concatenate([embeddings[node], type_embeddings[node_types[node][0]]])
+                    v2 = np.concatenate([embeddings[other_node], type_embeddings[node_types[other_node][0]]])
+                    cos_sim = cosine_similarity(v1, v2)
+                    if cos_sim > 0:
+                        disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
 
         # Page rank computaton - epsilon is increased by a factor 2 until convergence
         page_rank = None

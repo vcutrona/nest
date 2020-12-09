@@ -1,4 +1,5 @@
 import pickle
+from typing import List
 
 import numpy as np
 
@@ -37,9 +38,15 @@ class RDF2VecTypePredictor:
         self._classes = pickle.load(open('classes_list.pkl', 'rb'))
         self._r2v = RDF2Vec()
 
-    def predict_types(self, uris, size=1):
+    def predict_types(self, uris, size: int = 1):
+        """
+        Predict types for the given URIs
+        :param uris: a DBpedia class URI, or a list of DBpedia class URIs
+        :param size: the number of types predicted for each URI
+        :return: a dict {<uri>: [<type>]}
+        """
         types = {}
-        rdf2vectors = {k: v for k, v in self._r2v.get_vectors(uris).items() if v}
+        rdf2vectors = {k: v for k, v in self._r2v.get_vectors(uris).items() if v.all()}
         vectors = np.array(list(rdf2vectors.values()))
         if vectors.size > 0:
             pred = self._model.predict(vectors)
