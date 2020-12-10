@@ -19,7 +19,7 @@ from generators.baselines import FactBase, EmbeddingOnGraph
 from lookup import LookupService
 from utils.embeddings import RDF2Vec, TEE
 from utils.functions import get_most_frequent, cosine_similarity, simplify_string
-from utils.nn import RDF2VecTypePredictor
+from utils.nn import RDF2VecTypePredictor, ABS2VecTypePredictor
 
 
 class FastElmo(EmbeddingCandidateGenerator):
@@ -226,7 +226,9 @@ class FactBaseST(FactBase):
 
     def __init__(self, *lookup_services: LookupService, config: FactBaseConfig):
         super().__init__(*lookup_services, config=config)
-        self._type_predictor = None
+
+    def _init_model(self):
+        raise NotImplementedError
 
     def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
@@ -234,8 +236,7 @@ class FactBaseST(FactBase):
         :param search_keys:
         :return:
         """
-        if not self._type_predictor:  # Lazy init
-            self._type_predictor = RDF2VecTypePredictor()
+        type_predictor = self._init_model()
 
         lookup_results = dict(self._lookup_candidates(search_keys))
         generator_results = {}
@@ -243,7 +244,7 @@ class FactBaseST(FactBase):
         # Pre-fetch types and description of the top candidate of each candidates set
         candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
         types = functools.reduce(operator.iconcat,
-                                 self._type_predictor.predict_types(candidates_set).values(),
+                                 type_predictor.predict_types(candidates_set).values(),
                                  [])
         description_tokens = functools.reduce(operator.iconcat,
                                               self._get_descriptions_tokens(candidates_set).values(),
@@ -267,15 +268,6 @@ class FactBaseST(FactBase):
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
                      if candidate_relations}
 
-        # Keep track for future analysis
-        # filename = os.path.join(
-        #     os.path.dirname(__file__),
-        #     'factbase_details',
-        #     '%s_%s_%s.json' % (self.id, table.dataset_id, table.tab_id))
-        # json.dump({'types': acceptable_types, 'tokens': description_tokens, 'relations': relations},
-        #           open(filename, 'w'),
-        #           indent=2)
-
         # Second scan - refinement and loose searches
         for search_key, candidates in lookup_results.items():
             # Skip already annotated cells
@@ -284,7 +276,7 @@ class FactBaseST(FactBase):
 
             if candidates:
                 # Pre-fetch types and description of all the candidates of not annotated cells
-                types = self._type_predictor.predict_types(list(candidates), size=2)  # consider the best two types
+                types = type_predictor.predict_types(list(candidates), size=2)  # consider the best two types
                 missing = [uri for uri in types if not types[uri]]
                 dbp_types = self._dbp.get_types_for_uris(missing)
                 types.update(dbp_types)
@@ -313,6 +305,16 @@ class FactBaseST(FactBase):
                 generator_results[search_key] = GeneratorResult(search_key, [])
 
         return list(generator_results.values())
+
+
+class FactBaseSTR2V(FactBaseST):
+    def _init_model(self):
+        return RDF2VecTypePredictor()
+
+
+class FactBaseSTA2V(FactBaseST):
+    def _init_model(self):
+        return ABS2VecTypePredictor()
 
 
 class FactBaseV2ST(FactBaseV2):
