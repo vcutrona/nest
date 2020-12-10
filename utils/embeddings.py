@@ -40,6 +40,11 @@ class WORD2Vec(EmbeddingModelService):
         super().__init__(uri)
 
 
+class ABS2Vec(EmbeddingModelService):
+    def __init__(self, uri='http://titan:5997/a2v/bert-1024'):
+        super().__init__(uri)
+
+
 class OWL2Vec(EmbeddingModel):
     def __init__(self):
         self._model = KeyedVectors.load_word2vec_format('./dbpedia_owl2vec')
