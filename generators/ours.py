@@ -518,7 +518,7 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
             # Filter candidates that have an embedding in w2v.
             nodes = sorted([(candidate, {'weight': degrees[candidate]})
                             for candidate in candidates
-                            if embeddings[candidate] is not None],
+                            if embeddings[candidate].all()],
                            key=lambda x: x[1]['weight'], reverse=True)
 
             # Take only the max_candidates most relevant (highest priors probability) candidates.

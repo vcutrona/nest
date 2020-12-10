@@ -11,17 +11,20 @@ class RDF2VecTypePredictor:
 
     def __init__(self):
 
+        import os
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
         from tensorflow import keras
         from tensorflow.keras import layers
         import tensorflow as tf
 
-        gpus = tf.config.experimental.list_physical_devices('GPU')
-        if gpus:
-            try:
-                for gpu in gpus:  # Currently, memory growth needs to be the same across GPUs
-                    tf.config.experimental.set_memory_growth(gpu, True)
-            except RuntimeError as e:
-                print(e)  # Memory growth must be set before GPUs have been initialized
+        # gpus = tf.config.experimental.list_physical_devices('GPU')
+        # if gpus:
+        #     try:
+        #         for gpu in gpus:  # Currently, memory growth needs to be the same across GPUs
+        #             tf.config.experimental.set_memory_growth(gpu, True)
+        #     except RuntimeError as e:
+        #         print(e)  # Memory growth must be set before GPUs have been initialized
 
         subject_input = keras.Input(
             shape=(200,), name="title"
@@ -46,7 +49,7 @@ class RDF2VecTypePredictor:
         :return: a dict {<uri>: [<type>]}
         """
         types = {}
-        rdf2vectors = {k: v for k, v in self._r2v.get_vectors(uris).items() if v is not None}
+        rdf2vectors = {k: v for k, v in self._r2v.get_vectors(uris).items() if v.all()}
         vectors = np.array(list(rdf2vectors.values()))
         if vectors.size > 0:
             pred = self._model.predict(vectors)
