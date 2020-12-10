@@ -412,11 +412,10 @@ class EmbeddingOnGraphV2(EmbeddingOnGraph):
         self._w2v = RDF2Vec()
         self._type_predictor = None
 
-    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+    def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         if not self._type_predictor:  # Lazy init
             self._type_predictor = RDF2VecTypePredictor()
 
-        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
 
         # Pre-fetch the top candidate of each candidates set
@@ -498,11 +497,10 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
         self._type_predictor = None
         self._tee = TEE()
 
-    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+    def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         if not self._type_predictor:  # Lazy init
             self._type_predictor = RDF2VecTypePredictor()
 
-        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
 
         # Create a complete directed k-partite disambiguation graph where k is the number of search keys.

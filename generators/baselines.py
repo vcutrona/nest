@@ -253,8 +253,8 @@ class EmbeddingOnGraph(CandidateGenerator):
         self._dbp = DBpediaWrapper()
         self._w2v = WORD2Vec()
 
-    def get_candidates(self, table: Table) -> List[GeneratorResult]:
-        search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
+    def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
+        #search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
 
         # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
@@ -320,3 +320,24 @@ class EmbeddingOnGraph(CandidateGenerator):
                                                               for candidate in candidates],
                                                              reverse=True)])
                 for search_key, candidates in sk_nodes.items()]
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        """
+        This method annotates each table column separately, by finding which are the column types and
+        the relationships between the current column and the other.
+        :param table: a list of search_keys, which must belong to the same table column
+        :return: a list of GeneratorResult
+        """
+        col_search_keys = {}
+        for cell in table.get_gt_cells():
+            if cell.col_id not in col_search_keys:
+                col_search_keys[cell.col_id] = []
+            col_search_keys[cell.col_id].append(table.get_search_key(cell))
+
+        if self._config.max_workers == 1:
+            results = [self._get_candidates_for_column(search_keys) for search_keys in col_search_keys.values()]
+        else:
+            with ProcessPoolExecutor(self._config.max_workers) as pool:
+                results = pool.map(self._get_candidates_for_column, col_search_keys.values())
+
+        return functools.reduce(operator.iconcat, results, [])

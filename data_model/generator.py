@@ -58,6 +58,7 @@ class FactBaseConfig(CandidateGeneratorConfig):
 class EmbeddingOnGraphConfig(CandidateGeneratorConfig):
     max_candidates: int
     thin_out_frac: float
+    max_workers: int = 1
 
     def config_str(self) -> str:
         return "__".join([super().config_str(),
