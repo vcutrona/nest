@@ -208,6 +208,10 @@ class HybridGenerator(Generator):
     def id(self) -> str:
         return "__".join([self.__class__.__name__] + [generator.id for generator in self._generators])
 
+    @property
+    def generators(self) -> List[CandidateGenerator]:
+        return list(self._generators)
+
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
         res_dict = dict()
         empty_candidates = []
@@ -223,3 +227,36 @@ class HybridGenerator(Generator):
             if not empty_candidates:  # no more cells to annotate
                 break
         return [GeneratorResult(search_key, candidates) for search_key, candidates in res_dict.items()]
+
+
+class HybridGeneratorSimulator:
+    """
+    Simulate HybridGenerator results on already computed tables.
+    """
+
+    @staticmethod
+    def get_candidates(*tables: Table):
+        """
+        Combine results of already computed tables.
+        :param tables: a list of annotated tables (i-th table annotated by the HybridGenerator i-th generator)
+        :return:
+        """
+        results = []
+        missing_cells = tables[0].get_gt_cells()
+        for table in tables:
+            new_missing = []
+            for cell in missing_cells:
+                if cell in table.cell_annotations:
+                    entities = table.cell_annotations[cell].entities
+                    if entities:
+                        results.append(GeneratorResult(search_key=table.get_search_key(cell),
+                                                       candidates=[entity.uri for entity in entities]))
+                    else:
+                        new_missing.append(cell)
+                else:
+                    new_missing.append(cell)
+            missing_cells = new_missing
+            if not missing_cells:
+                break
+
+        return results
