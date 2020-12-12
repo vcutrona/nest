@@ -1,4 +1,4 @@
-from enum import Enum
+import os
 from typing import List
 
 import numpy as np
@@ -47,7 +47,8 @@ class ABS2Vec(EmbeddingModelService):
 
 class OWL2Vec(EmbeddingModel):
     def __init__(self):
-        self._model = KeyedVectors.load_word2vec_format('./dbpedia_owl2vec')
+        model_filepath = os.path.join(os.path.dirname(__file__), 'data', 'dbpedia_owl2vec')
+        self._model = KeyedVectors.load_word2vec_format(model_filepath)
 
     def get_vectors(self, uris: List[str]):
         """
@@ -60,7 +61,8 @@ class OWL2Vec(EmbeddingModel):
 
 class TEE(EmbeddingModel):
     def __init__(self):
-        self._model = KeyedVectors.load('./tee.wv')
+        model_filepath = os.path.join(os.path.dirname(__file__), 'data', 'tee.wv')
+        self._model = KeyedVectors.load(model_filepath)
 
     def get_vectors(self, uris: List[str]):
         """

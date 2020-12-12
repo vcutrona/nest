@@ -1,3 +1,4 @@
+import os
 import pickle
 
 import numpy as np
@@ -22,19 +23,19 @@ class RDF2VecTypePredictor:
             except RuntimeError as e:
                 print(e)  # Memory growth must be set before GPUs have been initialized
 
-        subject_input = keras.Input(
-            shape=(200,), name="title"
-        )
+        model_filepath = os.path.join(os.path.dirname(__file__), 'data', 'rdf2vec_pred.keras')
+        classes_filepath = os.path.join(os.path.dirname(__file__), 'data', 'rdf2vec_pred_classes.pkl')
 
+        subject_input = keras.Input(shape=(200,), name="title")
         x = layers.Dense(300, activation="relu")(subject_input)
         dense_x = layers.Dense(300, activation="relu")(x)
         likelihood_pred = layers.Dense(236, activation="softmax")(dense_x)
         self._model = keras.Model(inputs=subject_input, outputs=likelihood_pred, )
         self._model.compile(loss="bce",
                             optimizer=keras.optimizers.Adam(lr=0.01)),
-        self._model.load_weights('rdf2vec_pred.keras')
+        self._model.load_weights(model_filepath)
 
-        self._classes = pickle.load(open('rdf2vec_pred_classes.pkl', 'rb'))
+        self._classes = pickle.load(open(classes_filepath, 'rb'))
         self._r2v = RDF2Vec()
 
     def predict_types(self, uris, size=1):
@@ -71,18 +72,18 @@ class ABS2VecTypePredictor:
             except RuntimeError as e:
                 print(e)  # Memory growth must be set before GPUs have been initialized
 
-        subject_input = keras.Input(
-            shape=(1024,), name="title"
-        )
+        model_filepath = os.path.join(os.path.dirname(__file__), 'data', 'abs2vec_pred.keras')
+        classes_filepath = os.path.join(os.path.dirname(__file__), 'data', 'abs2vec_pred_classes.pkl')
 
+        subject_input = keras.Input(shape=(1024,), name="title")
         x = layers.Dense(300, activation="relu")(subject_input)
         likelihood_pred = layers.Dense(228, activation="softmax")(x)
         self._model = keras.Model(inputs=subject_input, outputs=likelihood_pred, )
         self._model.compile(loss="bce",
                             optimizer=keras.optimizers.Adam(lr=0.01)),
-        self._model.load_weights('abs2vec_pred.keras')
+        self._model.load_weights(model_filepath)
 
-        self._classes = pickle.load(open('abs2vec_pred_classes.pkl', 'rb'))
+        self._classes = pickle.load(open(classes_filepath, 'rb'))
         self._a2v = ABS2Vec()
 
     def predict_types(self, uris, size=1):
