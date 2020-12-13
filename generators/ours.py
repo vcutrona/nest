@@ -1,7 +1,6 @@
 import functools
 import operator
 import os
-
 from itertools import product
 from typing import List
 
@@ -19,7 +18,7 @@ from generators.baselines import FactBase, EmbeddingOnGraph
 from lookup import LookupService
 from utils.embeddings import RDF2Vec, TEE
 from utils.functions import get_most_frequent, cosine_similarity, simplify_string
-from utils.nn import RDF2VecTypePredictor, ABS2VecTypePredictor
+from utils.nn import TypePredictorService
 
 
 class FastElmo(EmbeddingCandidateGenerator):
@@ -309,19 +308,19 @@ class FactBaseST(FactBase):
 
 class FactBaseSTR2V(FactBaseST):
     def _init_model(self):
-        return RDF2VecTypePredictor()
+        return TypePredictorService.RDF2VEC
 
 
 class FactBaseSTA2V(FactBaseST):
     def _init_model(self):
-        return ABS2VecTypePredictor()
+        return TypePredictorService.ABS2VEC
 
 
 class FactBaseV2ST(FactBaseV2):
 
     def __init__(self, *lookup_services: LookupService, config: FactBaseConfig):
         super().__init__(*lookup_services, config=config)
-        self._type_predictor = None
+        self._type_predictor = TypePredictorService.RDF2VEC
 
     def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
         """
@@ -329,8 +328,6 @@ class FactBaseV2ST(FactBaseV2):
         :param search_keys:
         :return:
         """
-        if not self._type_predictor:  # Lazy init
-            self._type_predictor = RDF2VecTypePredictor()
 
         lookup_results = dict(self._lookup_candidates(search_keys))
         generator_results = {}
@@ -412,11 +409,9 @@ class EmbeddingOnGraphV2(EmbeddingOnGraph):
     def __init__(self, *lookup_services: LookupService, config: EmbeddingOnGraphConfig):
         super().__init__(*lookup_services, config=config)
         self._w2v = RDF2Vec()
-        self._type_predictor = None
+        self._type_predictor = TypePredictorService.RDF2VEC
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
-        if not self._type_predictor:  # Lazy init
-            self._type_predictor = RDF2VecTypePredictor()
 
         search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
@@ -497,13 +492,10 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
     def __init__(self, *lookup_services: LookupService, config: EmbeddingOnGraphConfig):
         super().__init__(*lookup_services, config=config)
         self._w2v = RDF2Vec()
-        self._type_predictor = None
+        self._type_predictor = TypePredictorService.RDF2VEC
         self._tee = TEE()
 
     def get_candidates(self, table: Table) -> List[GeneratorResult]:
-        if not self._type_predictor:  # Lazy init
-            self._type_predictor = RDF2VecTypePredictor()
-
         search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
 

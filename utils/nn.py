@@ -1,10 +1,40 @@
 import os
 import pickle
+from enum import Enum
 
 import numpy as np
+import requests
 
+from utils.caching import CacheWrapper, KVPair
 from utils.embeddings import RDF2Vec, ABS2Vec
 from utils.kgs import TYPES_BLACKLIST
+
+
+class TypePredictorService(Enum):
+    RDF2VEC = 'http://titan:5995/predict/r2v'
+    ABS2VEC = 'http://titan:5995/predict/a2v'
+
+    def __init__(self, _: str):
+        self._cache = CacheWrapper(os.path.join(os.path.dirname(__file__),
+                                                '.cache',
+                                                self.__class__.__name__,
+                                                self.name),
+                                   int(4e9))
+
+    def predict_types(self, uris, size=1):
+        cached_entries, to_compute = self._cache.get_cached_entries(uris)
+        results = {}
+        for uri, types in cached_entries:
+            if len(types) < size:
+                to_compute.append(uri)
+            else:
+                results[uri] = types[:size]
+        if to_compute:
+            data = {'uri': to_compute, 'size': size}
+            response = requests.get(self.value, params=data)
+            results.update(response.json())
+            self._cache.update_cache_entries([KVPair(uri, (uri, results[uri])) for uri in to_compute])
+        return results
 
 
 class RDF2VecTypePredictor:
