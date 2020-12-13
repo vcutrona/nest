@@ -25,7 +25,7 @@ class TypePredictorService(Enum):
         cached_entries, to_compute = self._cache.get_cached_entries(uris)
         results = {}
         for uri, types in cached_entries:
-            if len(types) < size:
+            if 0 < len(types) < size:
                 to_compute.append(uri)
             else:
                 results[uri] = types[:size]
