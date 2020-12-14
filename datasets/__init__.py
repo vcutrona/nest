@@ -145,7 +145,7 @@ class DatasetEnum(Enum):
         cea_groups = cea.groupby('tab_id')
         tables = []
         for tab_id, cea_group in cea_groups:
-            table = Table(tab_id, from_dataset.value, from_dataset._table_path(tab_id))
+            table = Table(tab_id, f'{from_dataset.value}_test', from_dataset._table_path(tab_id))
             table.set_gt_cell_annotations(zip(cea_group['row_id'], cea_group['col_id'], cea_group['entities']))
             if cta_groups and tab_id in cta_groups.groups:
                 cta_group = cta_groups.get_group(tab_id)
@@ -164,4 +164,5 @@ class DatasetEnum(Enum):
         tmp = Enum('GTTestEnum', {'%s_TEST_%d' % (from_dataset.name, size): tables})  # create a temp enum
         setattr(tmp, 'get_tables', lambda x: x.value)  # add the get_df function, that returns the tables
         setattr(tmp, 'get_table_categories', lambda x: from_dataset.get_table_categories())
+        setattr(tmp, 'total_tables', lambda x: len(tables))
         return list(tmp)[0]

@@ -1,9 +1,11 @@
-from enum import Enum
+import os
 from typing import List
 
 import numpy as np
 import requests
 from gensim.models import KeyedVectors
+
+from utils.caching import CacheWrapper, KVPair
 
 
 class EmbeddingModel:
@@ -18,6 +20,11 @@ class EmbeddingModel:
 class EmbeddingModelService(EmbeddingModel):
     def __init__(self, url):
         self._url = url
+        self._cache = CacheWrapper(os.path.join(os.path.dirname(__file__),
+                                                '.cache',
+                                                'EmbeddingModel',
+                                                self.__class__.__name__,),
+                                   int(4e9))
 
     def get_vectors(self, uris: List[str]):
         """
@@ -25,9 +32,14 @@ class EmbeddingModelService(EmbeddingModel):
         :param uris: a DBpedia resource URI, or a list of DBpedia resource URIs
         :return: a dict {<uri>: <vec>}. <vec> is None if it does not exist a vector for <uri>.
         """
-        data = {'uri': uris}
-        response = requests.get(self._url, params=data)
-        return {uri: np.array(vec) if vec else None for uri, vec in response.json().items()}
+        cached_entries, to_compute = self._cache.get_cached_entries(uris)
+        results = dict(cached_entries)
+        if to_compute:
+            data = {'uri': to_compute}
+            response = requests.get(self._url, params=data)
+            results.update({uri: np.array(vec) if vec else None for uri, vec in response.json().items()})
+            self._cache.update_cache_entries([KVPair(uri, (uri, results[uri])) for uri in to_compute])
+        return results
 
 
 class RDF2Vec(EmbeddingModelService):
@@ -40,9 +52,15 @@ class WORD2Vec(EmbeddingModelService):
         super().__init__(uri)
 
 
+class ABS2Vec(EmbeddingModelService):
+    def __init__(self, uri='http://titan:5997/a2v/bert-1024'):
+        super().__init__(uri)
+
+
 class OWL2Vec(EmbeddingModel):
     def __init__(self):
-        self._model = KeyedVectors.load_word2vec_format('./dbpedia_owl2vec')
+        model_filepath = os.path.join(os.path.dirname(__file__), 'data', 'dbpedia_owl2vec')
+        self._model = KeyedVectors.load_word2vec_format(model_filepath)
 
     def get_vectors(self, uris: List[str]):
         """
@@ -55,7 +73,8 @@ class OWL2Vec(EmbeddingModel):
 
 class TEE(EmbeddingModel):
     def __init__(self):
-        self._model = KeyedVectors.load('./tee.wv')
+        model_filepath = os.path.join(os.path.dirname(__file__), 'data', 'tee.wv')
+        self._model = KeyedVectors.load(model_filepath)
 
     def get_vectors(self, uris: List[str]):
         """

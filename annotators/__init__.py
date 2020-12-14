@@ -8,7 +8,7 @@ from tqdm.contrib.concurrent import process_map
 
 from data_model.dataset import Table, Entity
 from datasets import DatasetEnum
-from generators import EmbeddingCandidateGenerator, Generator
+from generators import EmbeddingCandidateGenerator, Generator, HybridGenerator, HybridGeneratorSimulator
 from pathlib import Path
 
 
@@ -40,23 +40,33 @@ class CEAAnnotator:
 
         # check existing result
         if not os.path.exists(filename):
+
             # keep the cell-search_key pair -> results may be shuffled!
             search_key_cell_dict = table.get_search_keys_cells_dict()
 
-            # Parallelize: if there are many cells, annotate chunks of cells (like mini-tables)
-            # # TODO delegate parallelization to Generators
-            # if self._micro_table_size > 0:
-            #     # print("Parallel", table, len(target_cells))
-            #     results = functools.reduce(operator.iconcat,
-            #                                process_map(self._generator.get_candidates,
-            #                                            list(chunk_list(list(search_key_cell_dict.keys()),
-            #                                                            self._micro_table_size)),
-            #                                            max_workers=2),
-            #                                [])
-            # else:
-            #     # print("NO Parallel", table, len(target_cells))
+            if isinstance(self._generator, HybridGenerator):
+                # try to reuse already annotated tables
+                tables = []
+                for generator in self._generator.generators:
+                    subfolder_path = os.path.join(os.path.dirname(__file__),
+                                                  'annotations',
+                                                  table.dataset_id,
+                                                  generator.id)
+                    subfilename = os.path.join(subfolder_path, '%s.pkl' % table.tab_id)
 
-            results = self._generator.get_candidates(table)
+                    if not os.path.exists(subfilename):
+                        break
+
+                    tables.append(pickle.load(open(subfilename, 'rb')))
+
+                if len(tables) == len(self._generator.generators):
+                    results = HybridGeneratorSimulator.get_candidates(*tables)  # combine results from many tables
+                else:
+                    results = self._generator.get_candidates(table)
+
+            else:
+                results = self._generator.get_candidates(table)
+
             for search_key, candidates in results:
                 if candidates:
                     for cell in search_key_cell_dict[search_key]:
