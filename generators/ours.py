@@ -570,6 +570,158 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
                 for search_key, candidates in sk_nodes.items()]
 
 
+class EmbeddingOnGraphGlobal(EmbeddingOnGraph):
+
+    def __init__(self, *lookup_services: LookupService, config: EmbeddingOnGraphConfig):
+        super().__init__(*lookup_services, config=config)
+        self._w2v = RDF2Vec()
+        self._type_predictor = None
+        self._tee = TEE()
+
+    def get_candidates(self, table: Table) -> List[GeneratorResult]:
+        if not self._type_predictor:  # Lazy init
+            self._type_predictor = RDF2VecTypePredictor()
+
+        col_search_keys = {}
+        row_search_keys = {}
+        for cell in table.get_gt_cells():
+            if cell.col_id not in col_search_keys:
+                col_search_keys[cell.col_id] = []
+            if cell.row_id not in row_search_keys:
+                row_search_keys[cell.row_id] = []
+            col_search_keys[cell.col_id].append(table.get_search_key(cell))
+            row_search_keys[cell.row_id].append(table.get_search_key(cell))
+
+        lookup_results_col = {}
+        for col, search_key in col_search_keys.items():
+            lookup_results_col[col] = dict(self._lookup_candidates(search_key))
+        lookup_results_row = {}
+        for row, search_key in row_search_keys.items():
+            lookup_results_row[row] = dict(self._lookup_candidates(search_key))
+
+        # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
+        disambiguation_graph_col = []
+        disambiguation_graph_row = []
+        sk_nodes_col = []
+        sk_nodes_row = []
+        personalization = {}  # prepare dict for pagerank with normalized priors
+        embeddings = {}
+
+        for (col, lookup) in enumerate(lookup_results_col.values()):
+            disambiguation_graph_col.append(nx.DiGraph())
+            sk_nodes_col.append(dict())
+            for search_key, candidates in lookup.items():
+                degrees = self._dbp.get_degree_for_uris(candidates)
+                embeddings.update(self._w2v.get_vectors(candidates))
+
+                # Filter candidates that have an embedding in w2v.
+                nodes = sorted([(candidate, {'weight': degrees[candidate]})
+                                for candidate in candidates
+                                if embeddings[candidate].all()],
+                               key=lambda x: x[1]['weight'], reverse=True)
+
+                # Take only the max_candidates most relevant (highest priors probability) candidates.
+                nodes = nodes[:self._config.max_candidates]
+                disambiguation_graph_col[col].add_nodes_from(nodes)
+                sk_nodes_col[col][search_key] = [n[0] for n in nodes]
+
+                # Store normalized priors
+                weights_sum = sum([x[1]['weight'] for x in nodes])
+                for node, props in nodes:
+                    if node not in personalization:
+                        personalization[node] = []
+                    personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
+
+        for (row, lookup) in enumerate(lookup_results_row.values()):
+            disambiguation_graph_row.append(nx.DiGraph())
+            sk_nodes_row.append(dict())
+            for search_key, candidates in lookup.items():
+                degrees = self._dbp.get_degree_for_uris(candidates)
+                embeddings.update(self._w2v.get_vectors(candidates))
+
+                # Filter candidates that have an embedding in w2v.
+                nodes = sorted([(candidate, {'weight': degrees[candidate]})
+                                for candidate in candidates
+                                if embeddings[candidate].all()],
+                               key=lambda x: x[1]['weight'], reverse=True)
+
+                # Take only the max_candidates most relevant (highest priors probability) candidates.
+                nodes = nodes[:self._config.max_candidates]
+                disambiguation_graph_row[row].add_nodes_from(nodes)
+                sk_nodes_row[row][search_key] = [n[0] for n in nodes]
+
+                # Store normalized priors
+                weights_sum = sum([x[1]['weight'] for x in nodes])
+                for node, props in nodes:
+                    if node not in personalization:
+                        personalization[node] = []
+                    personalization[node].append(props['weight'] / weights_sum if weights_sum > 0 else 0)
+
+        # Predict types using the classifier
+        node_types = self._type_predictor.predict_types([node for sk_nodes in sk_nodes_col
+                                                         for nodes in list(sk_nodes.values())
+                                                         for node in nodes])
+        # Predict types using the classifier
+        node_types.update(self._type_predictor.predict_types([node for sk_nodes in sk_nodes_col
+                                                              for nodes in list(sk_nodes.values())
+                                                              for node in nodes]))
+        # Get type embeddings. Set is used to remove duplicate
+        type_embeddings = self._tee.get_vectors(list({t for types in list(node_types.values()) for t in types}))
+
+        # Add weighted edges among the nodes in the disambiguation graph.
+        # Avoid to connect nodes in the same partition.
+        # Weights of edges are the cosine similarity between the nodes which the edge is connected to.
+        # Only positive weights are considered.
+        for (col, k) in enumerate(sk_nodes_col):
+            for search_key, nodes in k.items():
+                other_nodes = set(disambiguation_graph_col[col].nodes()) - set(nodes)
+                for node, other_node in product(nodes, other_nodes):
+                    if type_embeddings[node_types[node][0]].all() and type_embeddings[node_types[other_node][0]].all():
+                        v1 = type_embeddings[node_types[node][0]]
+                        v2 = type_embeddings[node_types[other_node][0]]
+                        cos_sim = cosine_similarity(v1, v2)
+                        if cos_sim > 0:
+                            disambiguation_graph_col[col].add_weighted_edges_from([(node, other_node, cos_sim)])
+
+        for (row, k) in enumerate(sk_nodes_row):
+            for search_key, nodes in k.items():
+                other_nodes = set(disambiguation_graph_row[row].nodes()) - set(nodes)
+                for node, other_node in product(nodes, other_nodes):
+                    v1 = embeddings[node]
+                    v2 = embeddings[other_node]
+                    cos_sim = cosine_similarity(v1, v2)
+                    if cos_sim > 0:
+                        disambiguation_graph_row[row].add_weighted_edges_from([(node, other_node, cos_sim)])
+
+        disambiguation_graph = nx.DiGraph()
+        for col in disambiguation_graph_col:
+            disambiguation_graph = nx.compose(disambiguation_graph, col)
+        for row in disambiguation_graph_row:
+            disambiguation_graph = nx.compose(disambiguation_graph, row)
+
+        # Page rank computaton - epsilon is increased by a factor 2 until convergence
+        page_rank = None
+        epsilon = 1e-6
+        while page_rank is None:
+            try:
+                page_rank = nx.pagerank(disambiguation_graph,
+                                        tol=epsilon, max_iter=50, alpha=0.9,
+                                        personalization={node: np.mean(weights)
+                                                         for node, weights in personalization.items()})
+
+            except nx.PowerIterationFailedConvergence:
+                epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
+
+        # Sort candidates -> the higher the score, the better the candidate (reverse=True)
+        return [GeneratorResult(search_key,
+                                [c.candidate for c in sorted([ScoredCandidate(candidate, page_rank[candidate])
+                                                              for candidate in candidates],
+                                                             reverse=True)])
+                for (x, sk_nodes) in enumerate(sk_nodes_col)
+                for search_key, candidates in sk_nodes.items()]
+
+
+
 # ITERATIVE PAGERANK DO NOT SEEM IMPROVE RESULTS ON T2D -> LOT OF ANNOTATIONS PROVIDED ALREADY FROM 1st ITERATION
 #
 # class EmbeddingOnGraphV2(EmbeddingOnGraph):
