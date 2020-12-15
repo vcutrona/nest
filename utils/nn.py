@@ -62,7 +62,7 @@ class RDF2VecTypePredictor:
         dense_x = layers.Dense(300, activation="relu")(x)
         likelihood_pred = layers.Dense(236, activation="softmax")(dense_x)
         self._model = keras.Model(inputs=subject_input, outputs=likelihood_pred, )
-        self._model.compile(loss="bce",
+        self._model.compile(loss="categorical_crossentropy",
                             optimizer=keras.optimizers.Adam(lr=0.01)),
         self._model.load_weights(model_filepath)
 
@@ -116,7 +116,7 @@ class ABS2VecTypePredictor:
         x = layers.Dense(300, activation="relu")(subject_input)
         likelihood_pred = layers.Dense(228, activation="softmax")(x)
         self._model = keras.Model(inputs=subject_input, outputs=likelihood_pred, )
-        self._model.compile(loss="bce",
+        self._model.compile(loss="categorical_crossentropy",
                             optimizer=keras.optimizers.Adam(lr=0.01)),
         self._model.load_weights(model_filepath)
 
