@@ -13,6 +13,7 @@ from data_model.dataset import Table
 from data_model.generator import GeneratorResult, FactBaseConfig, EmbeddingOnGraphConfig, ScoredCandidate, \
     LookupGeneratorConfig
 from data_model.lookup import SearchKey
+from experiments.stats import FactBaseStats
 from generators import CandidateGenerator
 from lookup import LookupService
 from utils.embeddings import WORD2Vec
@@ -52,6 +53,7 @@ class FactBase(CandidateGenerator):
     def __init__(self, *lookup_services: LookupService, config: FactBaseConfig):
         super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
+        self._stats = FactBaseStats(self.__class__.__name__)
 
     def _get_descriptions_tokens(self, uris: List[str]) -> Dict[str, List[str]]:
         """
@@ -179,6 +181,7 @@ class FactBase(CandidateGenerator):
                         if col_id not in facts:
                             facts[col_id] = []
                         facts[col_id].append((candidates[0], col_value))
+                    self._stats.incr_exact()
 
         acceptable_types = get_most_frequent(types, n=5)
         acceptable_tokens = get_most_frequent(description_tokens)
@@ -205,6 +208,7 @@ class FactBase(CandidateGenerator):
                                                          description_tokens)
                 if refined_candidates:
                     generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
+                    self._stats.incr_strict()
                     continue
 
             # Loose search: increase the recall by allowing a big margin of edit distance (Levenshtein)
@@ -213,11 +217,13 @@ class FactBase(CandidateGenerator):
                 refined_candidates = self._search_loose(search_key.label, relation, context_dict[col_id])
                 if len(refined_candidates) > 0:
                     generator_results[search_key] = GeneratorResult(search_key, refined_candidates)
+                    self._stats.incr_loose()
                     break
 
             # Coarse- and fine-grained searches failed: no results
             if search_key not in generator_results:
                 generator_results[search_key] = GeneratorResult(search_key, [])
+                self._stats.incr_empty()
 
         return list(generator_results.values())
 
@@ -228,6 +234,7 @@ class FactBase(CandidateGenerator):
         :param table: a list of search_keys, which must belong to the same table column
         :return: a list of GeneratorResult
         """
+        self._stats.init(table.dataset_id, table.tab_id)
         col_search_keys = {}
         for cell in table.get_gt_cells():
             if cell.col_id not in col_search_keys:
