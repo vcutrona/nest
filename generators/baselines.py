@@ -334,10 +334,15 @@ class EmbeddingOnGraph(CandidateGenerator):
                 col_search_keys[cell.col_id] = []
             col_search_keys[cell.col_id].append(table.get_search_key(cell))
 
+        col_search_keys = {col: chunk_list(search_keys, 500) for col, search_keys in col_search_keys.items()}
+
         if self._config.max_workers == 1:
-            results = [self._get_candidates_for_column(search_keys) for search_keys in col_search_keys.values()]
+            results = [self._get_candidates_for_column(search_keys)
+                       for search_keys_list in col_search_keys.values()
+                       for search_keys in search_keys_list]
         else:
             with ProcessPoolExecutor(self._config.max_workers) as pool:
-                results = pool.map(self._get_candidates_for_column, col_search_keys.values())
-
+                results = pool.map(self._get_candidates_for_column,
+                                   [search_keys for search_keys_list in col_search_keys.values()
+                                    for search_keys in search_keys_list])
         return functools.reduce(operator.iconcat, results, [])
