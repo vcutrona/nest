@@ -15,7 +15,7 @@ from data_model.generator import GeneratorResult, FactBaseConfig, EmbeddingOnGra
 from data_model.lookup import SearchKey
 from generators import CandidateGenerator
 from lookup import LookupService
-from utils.embeddings import WORD2Vec
+from utils.embeddings import WORD2Vec, RDF2Vec
 from utils.functions import tokenize, simplify_string, first_sentence, cosine_similarity, chunk_list, get_most_frequent
 from utils.kgs import DBpediaWrapper
 
@@ -251,10 +251,9 @@ class EmbeddingOnGraph(CandidateGenerator):
                                                                          thin_out_frac=0.25)):
         super().__init__(*lookup_services, config=config)
         self._dbp = DBpediaWrapper()
-        self._w2v = WORD2Vec()
+        self._w2v = RDF2Vec()
 
     def _get_candidates_for_column(self, search_keys: List[SearchKey]) -> List[GeneratorResult]:
-        #search_keys = [table.get_search_key(cell_) for cell_ in table.get_gt_cells()]
         lookup_results = dict(self._lookup_candidates(search_keys))
 
         # Create a complete directed k-partite disambiguation graph where k is the number of search keys.
@@ -269,7 +268,7 @@ class EmbeddingOnGraph(CandidateGenerator):
             # Filter candidates that have an embedding in w2v.
             nodes = sorted([(candidate, {'weight': degrees[candidate]})
                             for candidate in candidates
-                            if embeddings[candidate].all()],
+                            if embeddings[candidate] is not None],
                            key=lambda x: x[1]['weight'], reverse=True)
 
             # Take only the max_candidates most relevant (highest priors probability) candidates.
@@ -333,11 +332,14 @@ class EmbeddingOnGraph(CandidateGenerator):
             if cell.col_id not in col_search_keys:
                 col_search_keys[cell.col_id] = []
             col_search_keys[cell.col_id].append(table.get_search_key(cell))
-
+        col_search_keys = {col: chunk_list(search_keys, 500) for col, search_keys in col_search_keys.items()}
         if self._config.max_workers == 1:
-            results = [self._get_candidates_for_column(search_keys) for search_keys in col_search_keys.values()]
+            results = [self._get_candidates_for_column(search_keys)
+                       for search_keys_list in col_search_keys.values()
+                       for search_keys in search_keys_list]
         else:
             with ProcessPoolExecutor(self._config.max_workers) as pool:
-                results = pool.map(self._get_candidates_for_column, col_search_keys.values())
-
+                results = pool.map(self._get_candidates_for_column,
+                                   [search_keys for search_keys_list in col_search_keys.values()
+                                    for search_keys in search_keys_list])
         return functools.reduce(operator.iconcat, results, [])

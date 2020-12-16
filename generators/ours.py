@@ -16,7 +16,7 @@ from data_model.lookup import SearchKey
 from generators import EmbeddingCandidateGenerator
 from generators.baselines import FactBase, EmbeddingOnGraph
 from lookup import LookupService
-from utils.embeddings import RDF2Vec, TEE, OWL2Vec
+from utils.embeddings import RDF2Vec, TEE, OWL2Vec, WORD2Vec
 from utils.functions import get_most_frequent, cosine_similarity, simplify_string
 from utils.nn import TypePredictorService
 
@@ -490,7 +490,6 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
 
     def __init__(self, *lookup_services: LookupService, config: EmbeddingOnGraphConfig):
         super().__init__(*lookup_services, config=config)
-        self._w2v = RDF2Vec()
         self._type_predictor = TypePredictorService.RDF2VEC
         self._tee = TEE()
 
@@ -511,7 +510,7 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
             # Filter candidates that have an embedding in w2v.
             nodes = sorted([(candidate, {'weight': degrees[candidate]})
                             for candidate in candidates
-                            if embeddings[candidate].all()],
+                            if embeddings[candidate] is not None],
                            key=lambda x: x[1]['weight'], reverse=True)
 
             # Take only the max_candidates most relevant (highest priors probability) candidates.
@@ -538,12 +537,18 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
         for search_key, nodes in sk_nodes.items():
             other_nodes = set(disambiguation_graph.nodes()) - set(nodes)
             for node, other_node in product(nodes, other_nodes):
-                if type_embeddings[node_types[node][0]].all() and type_embeddings[node_types[other_node][0]].all():
+                if type_embeddings[node_types[node][0]] is not None \
+                        and type_embeddings[node_types[other_node][0]] is not None:
                     v1 = np.concatenate([embeddings[node], type_embeddings[node_types[node][0]]])
                     v2 = np.concatenate([embeddings[other_node], type_embeddings[node_types[other_node][0]]])
                     cos_sim = cosine_similarity(v1, v2)
                     if cos_sim > 0:
                         disambiguation_graph.add_weighted_edges_from([(node, other_node, cos_sim)])
+
+        # Thin out a fraction of edges which weights are the lowest
+        thin_out = int(self._config.thin_out_frac * len(disambiguation_graph.edges.data("weight")))
+        disambiguation_graph.remove_edges_from(
+            sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
 
         # Page rank computaton - epsilon is increased by a factor 2 until convergence
         page_rank = None
@@ -557,6 +562,7 @@ class EmbeddingOnGraphST(EmbeddingOnGraph):
 
             except nx.PowerIterationFailedConvergence:
                 epsilon *= 2  # lower factor can be used too since pagerank is extremely fast
+
         # Sort candidates -> the higher the score, the better the candidate (reverse=True)
         return [GeneratorResult(search_key,
                                 [c.candidate for c in sorted([ScoredCandidate(candidate, page_rank[candidate])
@@ -609,7 +615,7 @@ class EmbeddingOnGraphGlobal(EmbeddingOnGraph):
                 # Filter candidates that have an embedding in w2v.
                 nodes = sorted([(candidate, {'weight': degrees[candidate]})
                                 for candidate in candidates
-                                if embeddings[candidate].all()],
+                                if embeddings[candidate] is not None],
                                key=lambda x: x[1]['weight'], reverse=True)
 
                 # Take only the max_candidates most relevant (highest priors probability) candidates.
@@ -634,7 +640,7 @@ class EmbeddingOnGraphGlobal(EmbeddingOnGraph):
                 # Filter candidates that have an embedding in w2v.
                 nodes = sorted([(candidate, {'weight': degrees[candidate]})
                                 for candidate in candidates
-                                if embeddings[candidate].all()],
+                                if embeddings[candidate] is not None],
                                key=lambda x: x[1]['weight'], reverse=True)
 
                 # Take only the max_candidates most relevant (highest priors probability) candidates.
@@ -654,7 +660,7 @@ class EmbeddingOnGraphGlobal(EmbeddingOnGraph):
                                                          for nodes in list(sk_nodes.values())
                                                          for node in nodes])
         # Predict types using the classifier
-        node_types.update(self._type_predictor.predict_types([node for sk_nodes in sk_nodes_col
+        node_types.update(self._type_predictor.predict_types([node for sk_nodes in sk_nodes_row
                                                               for nodes in list(sk_nodes.values())
                                                               for node in nodes]))
         # Get type embeddings. Set is used to remove duplicate
@@ -668,7 +674,8 @@ class EmbeddingOnGraphGlobal(EmbeddingOnGraph):
             for search_key, nodes in k.items():
                 other_nodes = set(disambiguation_graph_col[col].nodes()) - set(nodes)
                 for node, other_node in product(nodes, other_nodes):
-                    if type_embeddings[node_types[node][0]].all() and type_embeddings[node_types[other_node][0]].all():
+                    if type_embeddings[node_types[node][0]] is not None \
+                            and type_embeddings[node_types[other_node][0]] is not None:
                         v1 = type_embeddings[node_types[node][0]]
                         v2 = type_embeddings[node_types[other_node][0]]
                         cos_sim = cosine_similarity(v1, v2)
@@ -690,6 +697,11 @@ class EmbeddingOnGraphGlobal(EmbeddingOnGraph):
             disambiguation_graph = nx.compose(disambiguation_graph, col)
         for row in disambiguation_graph_row:
             disambiguation_graph = nx.compose(disambiguation_graph, row)
+
+        # Thin out a fraction of edges which weights are the lowest
+        thin_out = int(self._config.thin_out_frac * len(disambiguation_graph.edges.data("weight")))
+        disambiguation_graph.remove_edges_from(
+            sorted(disambiguation_graph.edges.data("weight"), key=lambda tup: tup[2])[:thin_out])
 
         # Page rank computaton - epsilon is increased by a factor 2 until convergence
         page_rank = None
