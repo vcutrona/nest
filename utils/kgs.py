@@ -223,6 +223,16 @@ class DBpediaWrapper:
         #           for result in self._sparql.query().convert()["results"]["bindings"]]
         # self._label_cache.set_entry(KVPair(uri, result))
 
+    def get_direct_types_for_uris(self, uris):
+        """
+        Get the direct types of a given list of entities
+
+        :param uris: a list of URIs
+        :return: a dict uri: direct_types
+        """
+        return {uri: [t for t in types if t not in TYPES_BLACKLIST]
+                for uri, types in self._get_attribute_for_uris(uris, 'direct_type', []).items()}
+
     def get_descriptions_for_uris(self, uris):
         """
         Get the descriptions of a given list of entities
