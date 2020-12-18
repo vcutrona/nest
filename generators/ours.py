@@ -242,10 +242,12 @@ class FactBaseST(FactBase):
 
         # Pre-fetch types and description of the top candidate of each candidates set
         candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
-        types = functools.reduce(operator.iconcat,
-                                 list(self._dbp.get_types_for_uris(candidates_set).values()) +
-                                 list(type_predictor.predict_types(candidates_set).values()),  # add DNN types
-                                 [])
+        dbp_types = functools.reduce(operator.iconcat,
+                                     self._dbp.get_direct_types_for_uris(candidates_set).values(),
+                                     [])
+        dnn_types = functools.reduce(operator.iconcat,
+                                     type_predictor.predict_types(candidates_set).values(),
+                                     [])
 
         description_tokens = functools.reduce(operator.iconcat,
                                               self._get_descriptions_tokens(candidates_set).values(),
@@ -264,7 +266,11 @@ class FactBaseST(FactBase):
                         facts[col_id].append((candidates[0], col_value))
                     self._stats.incr_exact()
 
-        acceptable_types = get_most_frequent(types, n=5)
+        dbp_acceptable_types = get_most_frequent(dbp_types, n=5)
+        dnn_acceptable_types = get_most_frequent(dnn_types, n=5)
+        acceptable_types = list(set(dbp_acceptable_types) & set(dnn_acceptable_types))
+        if not acceptable_types:
+            acceptable_types = dbp_acceptable_types
         acceptable_tokens = get_most_frequent(description_tokens)
         relations = {col_id: candidate_relations[0][0]
                      for col_id, candidate_relations in self._contains_facts(facts, min_occurrences=5).items()
@@ -278,13 +284,11 @@ class FactBaseST(FactBase):
 
             if candidates:
                 # Pre-fetch types and description of all the candidates of not annotated cells
-                types = self._dbp.get_types_for_uris(candidates)
+                types = self._dbp.get_direct_types_for_uris(candidates)
                 # Add DNN types; consider the best two types only
                 for uri, uri_types in type_predictor.predict_types(list(candidates), size=2).items():
                     if uri in types:
                         types[uri] += uri_types
-                    else:
-                        types[uri] = uri_types
 
                 description_tokens = self._get_descriptions_tokens(candidates)
 

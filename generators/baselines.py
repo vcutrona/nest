@@ -164,7 +164,7 @@ class FactBase(CandidateGenerator):
         # Pre-fetch types and description of the top candidate of each candidates set
         candidates_set = list({candidates[0] for candidates in lookup_results.values() if candidates})
         types = functools.reduce(operator.iconcat,
-                                 self._dbp.get_types_for_uris(candidates_set).values(),
+                                 self._dbp.get_direct_types_for_uris(candidates_set).values(),
                                  [])
         description_tokens = functools.reduce(operator.iconcat,
                                               self._get_descriptions_tokens(candidates_set).values(),
@@ -197,7 +197,7 @@ class FactBase(CandidateGenerator):
 
             if candidates:
                 # Pre-fetch types and description of all the candidates of not annotated cells
-                types = self._dbp.get_types_for_uris(candidates)
+                types = self._dbp.get_direct_types_for_uris(candidates)
                 description_tokens = self._get_descriptions_tokens(candidates)
 
                 # Strict search: filter lists of candidates by removing entities that do not match types and tokens
