@@ -1,0 +1,25 @@
+version: '3.5'
+services:
+  r2v:
+    image: vcutrona/flask_r2v:eswc21
+    ports:
+      - "5999:5000"
+    networks:
+      - nest
+  a2v:
+    image: vcutrona/flask_a2v:eswc21
+    ports:
+      - "5997:5000"
+    volumes:
+      - <absolute/path/to/abstract_embeddings.pkl>:/app/data/abstract_embeddings.pkl
+    networks:
+      - nest
+  type_predictors:
+    image: vcutrona/flask_type_predictors:eswc21
+    expose:
+      - "5995:5000"
+    networks:
+      - nest
+
+networks:
+  nest:
