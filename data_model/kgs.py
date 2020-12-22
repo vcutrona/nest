@@ -5,7 +5,7 @@ from typing import NamedTuple
 
 @dataclass
 class DBpediaWrapperConfig:
-    es_host: str = 'localhost'
+    es_host: str = 'titan'
     index: str = 'dbpedia'
     sparql_endpoint: str = 'http://dbpedia.org/sparql'
     default_graph: str = 'http://dbpedia.org'

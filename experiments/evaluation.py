@@ -110,7 +110,7 @@ class CEAEvaluator:
         2) F1 Score is used as the primary score; Precision is used as the secondary score.
         3) An empty annotation of a cell will lead to an annotated cell;
            We suggest to exclude the cell with empty annotation in the submission file.
-        :param tables: a list of pair <gt_table, table>
+        :param tables: a list tables
         :return:
         """
 
